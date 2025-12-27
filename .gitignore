@@ -1,0 +1,95 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# Environment Variables and Secrets
+.env
+.env.local
+.env.*.local
+.env.production.local
+
+# Project-specific Output Files
+logs/
+outputs/
+*.json
+!requirements.txt
+!.env.example
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# OS-specific
+.AppleDouble
+.LSOverride
+*.lnk
+
+# Byte-compiled
+*.pyc
+*.pyo
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+
+ARCHITECTURE.md
+COMPLETION_REPORT.md
+DOCS_INDEX.md
+GOOGLE_MIGRATION_COMPLETE.md
+GROQ_SETUP.md
+IMPLEMENTATION_SUMMARY.md
+INSTALLATION.md
+PROJECT_COMPLETE.md
+QUICKSTART.md
+START_HERE.md
+VISUAL_GUIDE.md
+
+
+*.log 
+
+test_latex_extraction.py
+examples.py
