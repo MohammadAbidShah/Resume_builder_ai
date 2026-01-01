@@ -71,7 +71,17 @@ class ATSCheckerAgent:
             is_valid, llm_analysis = validate_json_output(response_text)
             
             if is_valid:
-                # Merge tool results with LLM analysis
+                # Merge while preserving the higher ATS score to avoid downgrades when tool parsing is authoritative
+                tool_score = tool_results.get('ats_score', 0)
+                llm_score = llm_analysis.get('ats_score', tool_score)
+
+                # If tool found significant issues (score < 75), use tool score as floor
+                if tool_score < 75:
+                    llm_analysis['ats_score'] = max(tool_score, llm_score * 0.9)
+                else:
+                    # Otherwise trust the maximum of tool and LLM to prevent regressions
+                    llm_analysis['ats_score'] = max(tool_score, llm_score)
+
                 result = {**tool_results, **llm_analysis}
             else:
                 # Fall back to tool results if LLM output is invalid

@@ -181,9 +181,17 @@ def validate_latex_syntax(latex_code: str) -> Tuple[bool, List[str]]:
         errors.append(f"Unmatched braces: {open_braces} open, {close_braces} close")
     
     # Unmatched backslashes at end of line
-    bad_lines = [line for line in latex_code.split('\n') if line.strip().endswith('\\')]
+    bad_lines = []
+    for line in latex_code.split('\n'):
+        stripped = line.rstrip()
+        if not stripped:
+            continue
+        match = re.search(r'(\\+)$', stripped)
+        trailing = len(match.group(1)) if match else 0
+        if trailing == 1:  # flag only a single trailing backslash
+            bad_lines.append(stripped)
     if bad_lines:
-        errors.append(f"Lines ending with single backslash (potential command breaks)")
+        errors.append("Lines ending with single backslash (potential command breaks)")
     
     # Check for common typos
     if '\\textbff' in latex_code:

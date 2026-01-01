@@ -39,9 +39,11 @@ def node_generate_content(state: ResumeState) -> Dict[str, Any]:
         logger.error(f"Content generation failed: {result.get('error')}")
         return {"content_generation_error": result.get("error")}
     
-    # Extract and return
+    # Extract and return - keep personal_info so it flows through to LaTeX generator
+    # Also include job_description for ATS optimization in LaTeX generator
     resume_content = {k: v for k, v in result.items() 
-                     if k not in ["success", "personal_info", "source_job_keywords"]}
+                     if k not in ["success", "source_job_keywords"]}
+    resume_content["job_description"] = state.job_description  # Add JD for ATS optimizer
     
     logger.info("[OK] Resume content generated successfully")
     return {"resume_content": resume_content}

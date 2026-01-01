@@ -16,13 +16,54 @@ from config.settings import GROQ_API_KEY, GROQ_API_URL, GROQ_MODEL, GROQ_TEMPERA
 from utils.logger import logger
 
 
+def _extract_json_from_prompt(prompt: str) -> dict:
+    """Extract JSON resume content from the prompt text."""
+    try:
+        # Look for JSON block in the prompt
+        start_idx = prompt.find('{')
+        if start_idx == -1:
+            return {}
+        # Find matching closing brace
+        brace_count = 0
+        end_idx = start_idx
+        for i in range(start_idx, len(prompt)):
+            if prompt[i] == '{':
+                brace_count += 1
+            elif prompt[i] == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i + 1
+                    break
+        json_str = prompt[start_idx:end_idx]
+        return json.loads(json_str)
+    except Exception:
+        return {}
+
+
+def _get_personal_info_from_prompt(prompt: str) -> dict:
+    """Extract personal_info dict from prompt JSON."""
+    data = _extract_json_from_prompt(prompt)
+    # Check if personal_info is nested in the extracted JSON
+    if isinstance(data.get("personal_info"), dict):
+        return data["personal_info"]
+    return data
+
+
 def _get_mock_response(prompt: str) -> str:
     """Return deterministic mock resume content based on prompt type.
     
     This enables full workflow testing without network access.
     Detects prompt type from system prompt markers.
+    Extracts actual resume data from the prompt to use real names, emails, etc.
     """
     prompt_lower = prompt.lower()
+    
+    # Extract personal info from JSON in prompt
+    personal_info = _get_personal_info_from_prompt(prompt)
+    name = personal_info.get("name", "Jane Doe")  # Fallback to dummy if not found
+    email = personal_info.get("email", "jane@example.com")
+    phone = personal_info.get("phone", "(555) 123-4567")
+    location = personal_info.get("location", "Seattle, WA")
     
     # Detect prompt type - check for LaTeX first (most specific)
     if "latex document expert" in prompt_lower or "latex code that compiles" in prompt_lower:
@@ -62,90 +103,124 @@ def _get_mock_response(prompt: str) -> str:
     
     # Return mock responses in valid JSON format
     if is_content_gen:
+        # For content generation, extract job keywords and personal info from prompt
+        # and return a structured resume
+        resume_data = _extract_json_from_prompt(prompt)
+        personal_info = _get_personal_info_from_prompt(prompt)
+        
+        # Build experience from personal info
+        experience = []
+        if isinstance(resume_data.get("personal_info"), dict) and resume_data["personal_info"].get("experience"):
+            experience = resume_data["personal_info"]["experience"][:2]  # Use up to 2 recent positions
+        
+        # Build skills from personal info
+        skills = {
+            "technical": [],
+            "soft": ["Leadership", "Communication", "Problem-solving", "Mentoring"]
+        }
+        if isinstance(resume_data.get("personal_info"), dict):
+            personal = resume_data["personal_info"]
+            if personal.get("skills"):
+                all_skills = []
+                for skill_category, skill_list in personal.get("skills", {}).items():
+                    if isinstance(skill_list, list):
+                        all_skills.extend(skill_list)
+                skills["technical"] = all_skills[:10] if all_skills else ["Python", "FastAPI", "Docker", "Kubernetes", "AWS"]
+        
+        # Build education from personal info
+        education = []
+        if isinstance(resume_data.get("personal_info"), dict) and resume_data["personal_info"].get("education"):
+            edu = resume_data["personal_info"]["education"][0]
+            education.append({
+                "degree": edu.get("degree", "Bachelor of Technology"),
+                "institution": edu.get("school", "University"),
+                "year": edu.get("graduation_year", 2025)
+            })
+        
         return json.dumps({
-            "professional_summary": "Results-driven Senior Python Developer with 8+ years of experience building scalable backend systems. Expertise in FastAPI, PostgreSQL, and AWS cloud services. Proven track record of optimizing database queries and mentoring junior developers.",
-            "experience": [
-                {
-                    "title": "Senior Python Developer",
-                    "company": "Tech Solutions Inc.",
-                    "duration": "2021-Present",
-                    "description": "Designed and developed scalable REST APIs using FastAPI, handling 10M+ daily requests. Optimized database queries reducing latency by 40%. Mentored 3 junior developers."
-                },
-                {
-                    "title": "Python Developer",
-                    "company": "Data Systems Ltd.",
-                    "duration": "2018-2021",
-                    "description": "Implemented microservices architecture using Docker and Kubernetes. Developed CI/CD pipelines reducing deployment time by 60%."
-                }
-            ],
-            "skills": {
-                "technical": ["Python 3.9+", "FastAPI", "Django", "PostgreSQL", "MongoDB", "Docker", "Kubernetes", "AWS", "Redis", "Git"],
-                "soft": ["Leadership", "Communication", "Problem-solving", "Mentoring"]
-            },
-            "education": [
-                {
-                    "degree": "B.S. Computer Science",
-                    "institution": "State University",
-                    "year": 2016
-                }
-            ],
-            "matched_keywords": ["Python", "FastAPI", "PostgreSQL", "AWS", "Docker", "REST API", "Microservices"],
-            "missing_keywords": ["GraphQL", "Apache Kafka"],
-            "optimization_notes": "Resume emphasizes scalability and mentoring, matching senior-level requirements."
+            "professional_summary": f"Experienced professional with strong expertise in {', '.join(skills['technical'][:3])} and proven track record of delivering scalable solutions.",
+            "experience": experience,
+            "skills": skills,
+            "education": education,
+            "matched_keywords": list(resume_data.get("matched_keywords", ["Python", "Docker"]))[:7],
+            "missing_keywords": [],
+            "optimization_notes": "Resume optimized for job description match."
         })
     
     elif is_latex_gen:
-        return """Here is the LaTeX code for the resume:
+        # Extract actual resume data from prompt
+        resume_data = _extract_json_from_prompt(prompt)
+        personal_info = _get_personal_info_from_prompt(prompt)
+        
+        # Build LaTeX from actual data
+        experience_tex = ""
+        if isinstance(resume_data.get("personal_info"), dict):
+            for exp in resume_data["personal_info"].get("experience", []):
+                title = exp.get("title", "Position")
+                company = exp.get("company", "Company")
+                duration = exp.get("duration", "Date")
+                description = exp.get("description", "")
+                
+                experience_tex += f"""\\textbf{{{{{title}}}}} | {company} | {duration}
+\\begin{{itemize}}
+  \\item {description}
+\\end{{itemize}}
+
+"""
+        
+        education_tex = ""
+        if isinstance(resume_data.get("personal_info"), dict):
+            for edu in resume_data["personal_info"].get("education", []):
+                degree = edu.get("degree", "Degree")
+                school = edu.get("school", "School")
+                year = edu.get("graduation_year", "Year")
+                education_tex += f"\\textbf{{{{{degree}}}}} | {school} | {year}\n"
+        
+        skills_tex = ""
+        if isinstance(resume_data.get("personal_info"), dict):
+            skills_dict = resume_data["personal_info"].get("skills", {})
+            for category, skill_list in skills_dict.items():
+                if isinstance(skill_list, list) and skill_list:
+                    skills_str = ", ".join(skill_list[:8])
+                    skills_tex += f"\\textbf{{{{{category}}}}}: {skills_str} \\\\\n"
+        
+        return f"""Here is the LaTeX code for the resume:
 
 ```latex
-\\documentclass[11pt]{article}
-\\usepackage[margin=0.5in]{geometry}
-\\usepackage{hyperref}
-\\pagestyle{empty}
+\\documentclass[11pt]{{article}}
+\\usepackage[margin=0.5in]{{geometry}}
+\\usepackage{{hyperref}}
+\\pagestyle{{empty}}
 
-\\begin{document}
+\\begin{{document}}
 
-{\\Large \\textbf{Jane Doe}} \\\\
-Seattle, WA | (555) 123-4567 | jane@example.com | LinkedIn
+{{\\Large \\textbf{{{name}}}}} \\\\
+{location} | {phone} | {email}
 
-\\section*{Professional Summary}
-Results-driven Senior Python Developer with 8+ years experience building scalable backend systems and mentoring engineering teams.
+\\section*{{Professional Summary}}
+Experienced professional with strong expertise in latest technologies and proven track record of delivering impactful solutions.
 
-\\section*{Technical Skills}
-\\textbf{Languages \\& Frameworks:} Python 3.9+, FastAPI, Django, REST APIs \\\\
-\\textbf{Databases:} PostgreSQL, MongoDB, Redis \\\\
-\\textbf{DevOps:} Docker, Kubernetes, AWS, CI/CD \\\\
-\\textbf{Other:} Git, Microservices, API Design
+\\section*{{Technical Skills}}
+{skills_tex}
 
-\\section*{Professional Experience}
+\\section*{{Professional Experience}}
 
-\\textbf{Senior Python Developer} | Tech Solutions Inc. | 2021--Present
-\\begin{itemize}
-  \\item Designed and developed scalable REST APIs using FastAPI handling 10M+ daily requests
-  \\item Optimized database queries reducing latency by 40\\%
-  \\item Mentored 3 junior developers on best practices
-\\end{itemize}
+{experience_tex}
 
-\\textbf{Python Developer} | Data Systems Ltd. | 2018--2021
-\\begin{itemize}
-  \\item Implemented microservices architecture using Docker and Kubernetes
-  \\item Developed CI/CD pipelines reducing deployment time by 60\\%
-\\end{itemize}
+\\section*{{Education}}
+{education_tex}
 
-\\section*{Education}
-\\textbf{B.S. Computer Science} | State University | 2016
-
-\\end{document}
+\\end{{document}}
 ```"""
     
     elif is_ats_check:
         return json.dumps({
             "ats_score": 92.5,
-            "keywords_present": ["Python", "FastAPI", "PostgreSQL", "AWS", "Docker", "REST API", "Microservices", "Kubernetes"],
-            "keywords_missing": ["GraphQL", "Apache Kafka"],
+            "keywords_present": ["resume", "experience", "education"],
+            "keywords_missing": [],
             "formatting_issues": [],
-            "improvement_suggestions": ["Consider adding GraphQL experience if applicable"],
-            "analysis_summary": "Excellent ATS score with strong keyword coverage. Resume passes ATS scanning and includes all critical job requirements."
+            "improvement_suggestions": [],
+            "analysis_summary": "Resume parsed successfully with good keyword coverage."
         })
     
     elif is_pdf_validate:
@@ -157,11 +232,11 @@ Results-driven Senior Python Developer with 8+ years experience building scalabl
             "visual_suggestions": ["Professional formatting maintained"],
             "structure_analysis": {
                 "sections": 5,
-                "subsections": 2,
-                "bullet_points": 6
+                "subsections": 0,
+                "bullet_points": 0
             },
             "recommendation": "PASS",
-            "summary": "LaTeX code is valid and produces professional-quality PDF. All sections are well-formatted."
+            "summary": "LaTeX code is valid and produces professional-quality output."
         })
     
     elif is_feedback:

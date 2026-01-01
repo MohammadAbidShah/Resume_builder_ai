@@ -7,9 +7,19 @@ class PersonalInfo(BaseModel):
     name: str
     email: str
     phone: str
+    location: Optional[str] = Field(default=None)
+    linkedin: Optional[str] = Field(default=None)
+    github: Optional[str] = Field(default=None)
+    # Ordered to match LaTeX output: Summary → Experience → Projects → Awards & Certifications → Education
+    summary: Dict[str, Any] = Field(default_factory=dict)
     experience: List[Dict[str, Any]] = Field(default_factory=list)
-    skills: Dict[str, List[str]] = Field(default_factory=dict)
+    projects: List[Dict[str, Any]] = Field(default_factory=list)
+    awards_and_certifications: List[Dict[str, Any]] = Field(default_factory=list)
     education: List[Dict[str, Any]] = Field(default_factory=list)
+    # Optional legacy fields kept for backward compatibility; leave empty when using new schema
+    skills: Dict[str, List[str]] = Field(default_factory=dict)
+    awards: List[Dict[str, Any]] = Field(default_factory=list)
+    certifications: List[Dict[str, Any]] = Field(default_factory=list)
 
 class ResumeState(BaseModel):
     """Main state for the resume building workflow."""

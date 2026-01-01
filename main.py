@@ -14,77 +14,6 @@ from utils.logger import logger
 from utils.helpers import format_validation_report, format_feedback_message
 from config.settings import RESUME_OUTPUT_DIR, LATEX_OUTPUT_DIR, OUTPUT_DIR, MAX_ITERATIONS
 
-def load_sample_job_description() -> str:
-    """Load a sample job description for testing."""
-    return """
-Senior Python Developer - Full Stack
-
-We're looking for an experienced Senior Python Developer to join our team.
-
-Required Skills:
-- Python 3.9+
-- FastAPI or Django
-- PostgreSQL/MongoDB
-- REST API development
-- Docker and Kubernetes
-- AWS cloud services
-- Git version control
-- Machine Learning basics
-
-Responsibilities:
-- Design and develop scalable backend services
-- Implement REST APIs
-- Optimize database queries
-- Write unit tests and integration tests
-- Collaborate with frontend teams
-- Manage deployments and CI/CD pipelines
-- Mentor junior developers
-
-Nice to have:
-- Microservices architecture
-- Redis caching
-- GraphQL
-- Apache Kafka
-- TensorFlow/PyTorch
-- Leadership experience
-"""
-
-def load_sample_personal_info() -> PersonalInfo:
-    """Load sample personal information for testing."""
-    return PersonalInfo(
-        name="John Doe",
-        email="john.doe@example.com",
-        phone="+1 (555) 123-4567",
-        experience=[
-            {
-                "title": "Python Developer",
-                "company": "Tech Corp",
-                "duration": "2021 - Present",
-                "description": "Developed REST APIs using FastAPI. Worked with PostgreSQL databases. Deployed applications using Docker."
-            },
-            {
-                "title": "Junior Developer",
-                "company": "StartUp Inc",
-                "duration": "2019 - 2021",
-                "description": "Built web applications using Django. Wrote unit tests. Used Git for version control."
-            }
-        ],
-        skills={
-            "Programming Languages": ["Python", "JavaScript"],
-            "Backend Frameworks": ["FastAPI", "Django"],
-            "Databases": ["PostgreSQL", "MongoDB"],
-            "Tools": ["Docker", "Git", "AWS", "Linux"],
-            "Other": ["REST APIs", "Unit Testing", "CI/CD"]
-        },
-        education=[
-            {
-                "degree": "Bachelor of Science in Computer Science",
-                "school": "State University",
-                "year": "2019"
-            }
-        ]
-    )
-
 def display_results(final_state) -> None:
     """Display the final results."""
     print("\n" + "="*80)
@@ -177,7 +106,8 @@ def save_execution_report(final_state, elapsed_time: float) -> None:
 def run_resume_builder(
     job_description: str,
     personal_info: Dict[str, Any],
-    use_sample: bool = False
+    use_sample: bool = False,
+    quiet: bool = False
 ) -> ResumeState:
     """
     Run the resume builder workflow.
@@ -218,45 +148,120 @@ def run_resume_builder(
         
         elapsed_time = time.time() - start_time
         
-        # Display results
-        display_results(final_state)
-        
+        # Display results (unless running in quiet/job mode)
+        if not quiet:
+            display_results(final_state)
+
         # Save report
         save_execution_report(final_state, elapsed_time)
-        
+
         logger.info(f"Total execution time: {elapsed_time:.2f} seconds")
-        
+
         return final_state
-        
+
     except Exception as e:
         logger.error(f"Workflow execution failed: {str(e)}", exc_info=True)
         raise
 
+
+def load_personal_info(filepath: str = "personal_info.json") -> Optional[Dict[str, Any]]:
+    """Load pre-stored personal info from JSON file."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"{filepath} not found. Falling back to sample personal info.")
+        return None
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON in {filepath}")
+        return None
+
+
 def main():
     """
-    Main entry point - can be run directly or imported.
+    Main entry point. Loads job description from input_data.json and runs workflow.
+    All output is written to the outputs folder; nothing is printed to terminal.
     """
-    # Example usage with sample data
-    print("\n" + "="*80)
-    print("RESUME BUILDER AI - AGENTIC WORKFLOW")
-    print("="*80 + "\n")
-    
-    # Check for Groq API key
-    from config.settings import GROQ_API_KEY
-    if not GROQ_API_KEY:
-        print("ERROR: GROQ_API_KEY not set in environment")
-        print("Please set GROQ_API_KEY environment variable with your Groq API key")
+    from config.settings import GROQ_API_KEY, GROQ_MOCK_MODE, OUTPUT_DIR
+
+    # Enforce Groq API key when not in mock mode
+    if not GROQ_MOCK_MODE and not GROQ_API_KEY:
+        logger.error("GROQ_API_KEY not set in environment (required in live mode)")
         sys.exit(1)
-    
-    # Run with sample data
-    print("Running with sample data for demonstration...\n")
+
+    # Load job description from input_data.json (default location)
+    job_json_path = Path('input_data.json')
+    if not job_json_path.exists():
+        logger.error(f"job description file not found: {job_json_path}")
+        sys.exit(1)
+
+    try:
+        with open(job_json_path, 'r', encoding='utf-8') as f:
+            job_data = json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to read job JSON: {e}")
+        sys.exit(1)
+
+    job_description = job_data.get('job_description', '')
+    if not isinstance(job_description, str) or not job_description.strip():
+        logger.error("job JSON must contain a non-empty 'job_description' string")
+        sys.exit(1)
+
+    # Load personal info (must exist)
+    personal_info = load_personal_info('personal_info.json')
+    if personal_info is None:
+        logger.error("personal_info.json not found or invalid; personal info is required in job mode")
+        sys.exit(1)
+
+    # Run workflow in quiet mode (suppress intermediate output)
     final_state = run_resume_builder(
-        job_description="AIML Engineer needed for innovative projects.",
-        personal_info={"Name": "Abid Shah", "Email": "abid.shah@example.com"},
-        use_sample=True
+        job_description=job_description,
+        personal_info=personal_info,
+        use_sample=False,
+        quiet=True
     )
-    
-    return final_state
+
+    # If success, print only the final LaTeX to stdout
+    success = final_state.get('success') if isinstance(final_state, dict) else getattr(final_state, 'success', False)
+    final_latex = final_state.get('final_latex') if isinstance(final_state, dict) else getattr(final_state, 'final_latex', None)
+
+    if success and final_latex:
+        # Save final LaTeX and resume JSON to outputs
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Ensure output dirs exist
+        Path(LATEX_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+        Path(RESUME_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
+        latex_path = Path(LATEX_OUTPUT_DIR) / f"resume_{timestamp}.tex"
+        with open(latex_path, 'w', encoding='utf-8') as f:
+            f.write(final_latex)
+
+        # Save resume content if available
+        resume_content = final_state.get('resume_content') if isinstance(final_state, dict) else getattr(final_state, 'resume_content', None)
+        if resume_content:
+            json_path = Path(RESUME_OUTPUT_DIR) / f"resume_{timestamp}.json"
+            with open(json_path, 'w', encoding='utf-8') as f:
+                json.dump(resume_content, f, indent=2)
+
+        # Log to files only (no stdout)
+        logger.info(f"Final LaTeX saved to: {latex_path}")
+        logger.info(f"Resume JSON saved to: {json_path if resume_content else 'N/A'}")
+        return final_state
+    else:
+        # On failure: save diagnostics to file, do not print to stdout
+        ats = final_state.get('ats_report') if isinstance(final_state, dict) else getattr(final_state, 'ats_report', None)
+        pdf = final_state.get('pdf_report') if isinstance(final_state, dict) else getattr(final_state, 'pdf_report', None)
+        feedback = final_state.get('feedback') if isinstance(final_state, dict) else getattr(final_state, 'feedback', None)
+
+        out = {
+            'status': final_state.get('overall_status') if isinstance(final_state, dict) else getattr(final_state, 'overall_status', 'unknown'),
+            'success': success,
+            'ats_score': ats.get('ats_score') if ats else None,
+            'pdf_quality': pdf.get('quality_score') if pdf else None,
+            'feedback': feedback
+        }
+        logger.error(f"Resume building failed. Diagnostics: {json.dumps(out, indent=2)}")
+        return final_state
 
 if __name__ == "__main__":
     import os

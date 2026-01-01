@@ -2,6 +2,8 @@
 import json
 from typing import Dict, Any
 from tools.groq_client import groq_generate
+from tools.ats_optimizer import ATSOptimizer
+from pathlib import Path
 from config.settings import CONTENT_MODEL, CONTENT_GENERATION_TEMPERATURE
 from config.prompts import SYSTEM_PROMPTS
 from tools import (
@@ -46,20 +48,24 @@ class LaTeXGeneratorAgent:
             logger.info("LaTeX Generator: Creating initial LaTeX")
         
         try:
-            prompt = self.system_prompt + "\n\n" + user_prompt
-            response_text = groq_generate(prompt, max_tokens=4096, temperature=0)
-            logger.info("LaTeX Generator: Received response from Groq API")
-            
-            # Extract LaTeX code (might be wrapped in markdown code blocks)
-            latex_code = self._extract_latex_code(response_text)
-            
-            if not latex_code:
-                logger.error("No LaTeX code found in response")
-                return {
-                    "success": False,
-                    "error": "No LaTeX code generated",
-                    "raw_output": response_text
-                }
+            # Prefer using the local LaTeX template if available
+            try:
+                latex_code = self._render_from_template(resume_content)
+                logger.info("LaTeX Generator: Rendered LaTeX from local template")
+            except FileNotFoundError:
+                # Fallback to LLM generation when template is not present
+                prompt = self.system_prompt + "\n\n" + user_prompt
+                response_text = groq_generate(prompt, max_tokens=4096, temperature=0)
+                logger.info("LaTeX Generator: Received response from Groq API")
+                # Extract LaTeX code (might be wrapped in markdown code blocks)
+                latex_code = self._extract_latex_code(response_text)
+                if not latex_code:
+                    logger.error("No LaTeX code found in response")
+                    return {
+                        "success": False,
+                        "error": "No LaTeX code generated",
+                        "raw_output": response_text
+                    }
             
             # Validate LaTeX syntax
             is_valid, latex_errors = validate_latex_syntax(latex_code)
@@ -167,5 +173,225 @@ Please regenerate the LaTeX code addressing:
 Return ONLY the complete corrected LaTeX code wrapped in ```latex ... ``` blocks.
 """
         return prompt
+
+    def _render_from_template(self, resume_content: Dict[str, Any]) -> str:
+        """Render LaTeX by filling `templates/resume_template.tex` with resume data.
+
+        Integrates ATS optimization to ensure JD alignment and measurable impact.
+        Raises FileNotFoundError if template not found.
+        """
+        template_path = Path("templates") / "resume_template.tex"
+        if not template_path.exists():
+            raise FileNotFoundError("LaTeX template not found")
+
+        with open(template_path, 'r', encoding='utf-8') as f:
+            tpl = f.read()
+
+        # Extract personal_info and job description
+        personal = resume_content.get("personal_info", {}) if isinstance(resume_content, dict) else {}
+        job_description = resume_content.get("job_description", "")
+
+        # Initialize ATS Optimizer if JD is available
+        ats_optimizer = None
+        if job_description:
+            ats_optimizer = ATSOptimizer(job_description)
+            logger.info("ATS Optimizer initialized for JD-aligned content generation")
+
+        def escape_latex(text: Any) -> str:
+            if text is None:
+                return ""
+            s = str(text)
+            # Basic safe replacements
+            replacements = [
+                ('\\', '\\textbackslash{}'),
+                ('%', '\\%'),
+                ('&', '\\&'),
+                ('$', '\\$'),
+                ('#', '\\#'),
+                ('_', '\\_'),
+                ('{', '\\{'),
+                ('}', '\\}'),
+                ('~', '\\textasciitilde{}'),
+                ('^', '\\textasciicircum{}')
+            ]
+            for old, new in replacements:
+                s = s.replace(old, new)
+            # Collapse multiple whitespace/newlines
+            s = s.replace('\r', ' ').replace('\n', ' ').strip()
+            return s
+
+        name = escape_latex(personal.get("name", ""))
+        contact_parts = []
+        if personal.get("location"):
+            contact_parts.append(escape_latex(personal.get("location")))
+        if personal.get("phone"):
+            contact_parts.append(escape_latex(personal.get("phone")))
+        if personal.get("email"):
+            email = personal.get("email")
+            email_esc = escape_latex(email)
+            contact_parts.append(f"\\href{{mailto:{email_esc}}}{{{email_esc}}}")
+        if personal.get("linkedin"):
+            linkedin = personal.get("linkedin")
+            linkedin_url = linkedin if linkedin.startswith("http") else f"https://{linkedin}"
+            contact_parts.append(f"\\href{{{escape_latex(linkedin_url)}}}{{{escape_latex(linkedin)}}}")
+        if personal.get("github"):
+            github = personal.get("github")
+            github_url = github if github.startswith("http") else f"https://{github}"
+            contact_parts.append(f"\\href{{{escape_latex(github_url)}}}{{{escape_latex(github)}}}")
+        contact = " | ".join(contact_parts)
+
+        # Generate ATS-optimized summary
+        summary = ""
+        if ats_optimizer:
+            summary = ats_optimizer.generate_summary(personal)
+            logger.info("ATS Optimizer: Generated optimized summary")
+        else:
+            summary = resume_content.get("professional_summary") or resume_content.get("summary") or ""
+        summary = escape_latex(summary)
+
+        # Generate ATS-optimized skills (grouped from JD)
+        skills_section = ""
+        skills = {}
+        if isinstance(personal.get("skills"), dict):
+            skills = personal.get("skills")
+        elif isinstance(resume_content.get("skills"), dict):
+            skills = resume_content.get("skills")
+        
+        # If ATS Optimizer available, always derive JD-aligned skills (even if personal skills are empty)
+        if ats_optimizer:
+            skills = ats_optimizer.get_skills_grouped(skills)
+            logger.info("ATS Optimizer: Applied JD-aligned skill grouping")
+        
+        for cat, vals in skills.items():
+            if isinstance(vals, list) and vals:
+                clean_vals = [escape_latex(v) for v in vals]
+                # produce two backslashes then newline for LaTeX linebreak
+                skills_section += f"\\textbf{{{escape_latex(cat)}}}: {', '.join(clean_vals)} " + "\\\\" + "\n"
+
+        # Generate ATS-optimized experience with measurable impact
+        exp_section = ""
+        experiences = personal.get("experience") or resume_content.get("experience") or []
+        for exp in experiences:
+            title = escape_latex(exp.get("title", ""))
+            company = escape_latex(exp.get("company", ""))
+            duration = escape_latex(exp.get("duration", ""))
+            location = escape_latex(exp.get("location", ""))
+            desc = escape_latex(exp.get("description", ""))
+            
+            exp_section += f"\\resumeSubheading{{{title}}}{{{duration}}}{{{company}}}{{{location}}}\n"
+            exp_section += "\\resumeItemListStart\n"
+            
+            # Generate 3-5 ATS-optimized bullets per role
+            if ats_optimizer:
+                bullets = ats_optimizer.generate_experience_bullets(exp)
+                logger.info(f"ATS Optimizer: Generated {len(bullets)} optimized bullets for {title}")
+                for bullet in bullets:
+                    exp_section += f"\\resumeItem{{{escape_latex(bullet)}}}\n"
+            elif desc:
+                exp_section += f"\\resumeItem{{{desc}}}\n"
+            
+            exp_section += "\\resumeItemListEnd\n\n"
+
+        # Projects (ATS-optimized if available)
+        projects_section = ""
+        projects = personal.get("projects") or resume_content.get("projects") or []
+        for proj in projects:
+            proj_name = escape_latex(proj.get("name", "Project"))
+            proj_duration = escape_latex(proj.get("duration", ""))
+            proj_tech = proj.get("technologies", [])
+            proj_desc = escape_latex(proj.get("description", ""))
+            proj_url = proj.get("url", "")
+            
+            # Format: Project Name with technologies and duration
+            tech_str = escape_latex(", ".join(proj_tech)) if proj_tech else ""
+            
+            projects_section += f"\\resumeProjectHeading{{\\textbf{{{proj_name}}}"
+            if tech_str:
+                projects_section += f" | \\textit{{{tech_str}}}"
+            projects_section += f"}}{{{proj_duration}}}\n"
+            projects_section += "\\resumeItemListStart\n"
+            
+            # If ATS optimizer available, generate optimized bullets
+            if ats_optimizer:
+                proj_bullets = ats_optimizer.generate_project_bullets(proj)
+                for bullet in proj_bullets[:3]:  # Max 3 bullets per project
+                    projects_section += f"\\resumeItem{{{escape_latex(bullet)}}}\n"
+            elif proj_desc:
+                # Split description by periods or newlines to create bullets
+                bullets = [b.strip() for b in proj_desc.replace('\n', '. ').split('. ') if b.strip()]
+                for bullet in bullets[:3]:
+                    projects_section += f"\\resumeItem{{{escape_latex(bullet)}}}\n"
+            
+            projects_section += "\\resumeItemListEnd\n\n"
+
+        # Awards & Certifications (combined section)
+        awards_and_certifications_section = ""
+
+        # Prefer combined field; fallback to legacy awards/certifications for backward compatibility
+        combined = personal.get("awards_and_certifications") or resume_content.get("awards_and_certifications") or []
+        awards = personal.get("awards") or resume_content.get("awards") or []
+        certifications = personal.get("certifications") or resume_content.get("certifications") or []
+
+        def build_award_line(entry: Dict[str, Any]) -> str:
+            name_tex = escape_latex(entry.get("name", ""))
+            issuer_tex = escape_latex(entry.get("issuer", ""))
+            date_tex = escape_latex(entry.get("date", ""))
+            desc_tex = ""
+
+            if ats_optimizer:
+                desc_tex = escape_latex(ats_optimizer.get_award_cert_description(entry))
+            else:
+                desc_tex = escape_latex(entry.get("description", ""))
+
+            line = f"\\textbf{{{name_tex}}}" if name_tex else ""
+            if issuer_tex:
+                line += f" (\\textbf{{{issuer_tex}}})"
+            if date_tex:
+                line += f" | {date_tex}"
+            if desc_tex:
+                line += f" — {desc_tex}"
+            return line
+
+        all_entries = []
+
+        if combined:
+            for entry in combined:
+                all_entries.append(build_award_line(entry))
+        else:
+            # Legacy paths
+            for cert in certifications:
+                all_entries.append(build_award_line(cert))
+
+            for award in awards:
+                all_entries.append(build_award_line(award))
+
+        # Render all entries as single bullet points (no duplication, no omission)
+        for entry_text in all_entries:
+            awards_and_certifications_section += f"\\resumeItem{{{entry_text}}}\n"
+
+        # Education (use as-is from personal_info)
+        education_section = ""
+        education_list = personal.get("education") or resume_content.get("education") or []
+        for edu in education_list:
+            degree = escape_latex(edu.get("degree", edu.get("school", "")))
+            school = escape_latex(edu.get("school", ""))
+            year = escape_latex(edu.get("graduation_year", edu.get("year", "")))
+            education_section += f"\\resumeSubheading{{{degree}}}{{{year}}}{{{school}}}{{}}\n"
+
+        # Perform replacements
+        rendered = tpl.replace("\\VAR_NAME", name)
+        rendered = rendered.replace("\\VAR_CONTACT", contact)
+        rendered = rendered.replace("\\VAR_SUMMARY", summary)
+        rendered = rendered.replace("\\VAR_SKILLS", skills_section)
+        rendered = rendered.replace("\\VAR_EXPERIENCE", exp_section)
+        rendered = rendered.replace("\\VAR_PROJECTS", projects_section)
+        rendered = rendered.replace("\\VAR_AWARDS_AND_CERTIFICATIONS", awards_and_certifications_section)
+        rendered = rendered.replace("\\VAR_EDUCATION", education_section)
+
+        # Log ATS score if optimizer available
+        if ats_optimizer:
+            logger.info("ATS Optimizer: Resume optimized for JD alignment and ATS compliance (Target: >=90)")
+
+        return rendered
 
 __all__ = ["LaTeXGeneratorAgent"]
