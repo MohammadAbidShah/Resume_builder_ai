@@ -1,7 +1,51 @@
 """Helper utilities for Resume Builder AI."""
 from typing import Dict, Any, List
 import json
+import os
+from pathlib import Path
 from datetime import datetime
+
+def cleanup_old_outputs(output_dir: str, max_files: int = 3) -> None:
+    """
+    Keep only the most recent N files in the output directory.
+    
+    Args:
+        output_dir: Directory containing output files
+        max_files: Maximum number of files to keep (default: 3)
+    """
+    try:
+        output_path = Path(output_dir)
+        if not output_path.exists():
+            return
+        
+        # Get all files with pattern resume_*.tex or resume_*.json or execution_report_*.json or iteration_*.json
+        files_to_clean = []
+        
+        # Different patterns for different file types
+        patterns = [
+            ("resume_*.tex", "latex"),
+            ("resume_*.json", "resumes"),
+            ("execution_report_*.json", "."),
+            ("iteration_*.json", "."),
+        ]
+        
+        for pattern, subdir in patterns:
+            search_path = output_path / subdir if subdir != "." else output_path
+            if not search_path.exists():
+                continue
+            
+            matching_files = list(search_path.glob(pattern))
+            if len(matching_files) > max_files:
+                # Sort by modification time, newest first
+                sorted_files = sorted(matching_files, key=os.path.getmtime, reverse=True)
+                # Delete files beyond the max_files limit
+                for old_file in sorted_files[max_files:]:
+                    try:
+                        old_file.unlink()
+                    except Exception as e:
+                        pass  # Silent cleanup, don't interrupt workflow
+    except Exception as e:
+        pass  # Silently handle any cleanup errors
 
 def save_iteration_state(state: Dict[str, Any], output_dir: str, iteration: int) -> str:
     """Save iteration state to JSON file for auditing."""
@@ -112,6 +156,7 @@ Maintain all original strong points while improving the areas mentioned in the f
     return prompt
 
 __all__ = [
+    "cleanup_old_outputs",
     "save_iteration_state",
     "format_feedback_message",
     "format_validation_report",

@@ -4,7 +4,11 @@ from typing import Dict, Any
 from tools.groq_client import groq_generate
 from tools.ats_optimizer import ATSOptimizer
 from pathlib import Path
-from config.settings import CONTENT_MODEL, CONTENT_GENERATION_TEMPERATURE
+from config.settings import (
+    CONTENT_MODEL,
+    CONTENT_GENERATION_TEMPERATURE,
+    TEMPLATE_FILE,
+)
 from config.prompts import SYSTEM_PROMPTS
 from tools import (
     generate_latex_code,
@@ -180,9 +184,9 @@ Return ONLY the complete corrected LaTeX code wrapped in ```latex ... ``` blocks
         Integrates ATS optimization to ensure JD alignment and measurable impact.
         Raises FileNotFoundError if template not found.
         """
-        template_path = Path("templates") / "resume_template.tex"
+        template_path = Path(TEMPLATE_FILE)
         if not template_path.exists():
-            raise FileNotFoundError("LaTeX template not found")
+            raise FileNotFoundError(f"LaTeX template not found at {template_path}")
 
         with open(template_path, 'r', encoding='utf-8') as f:
             tpl = f.read()
@@ -240,13 +244,10 @@ Return ONLY the complete corrected LaTeX code wrapped in ```latex ... ``` blocks
             contact_parts.append(f"\\href{{{escape_latex(github_url)}}}{{{escape_latex(github)}}}")
         contact = " | ".join(contact_parts)
 
-        # Generate ATS-optimized summary
-        summary = ""
-        if ats_optimizer:
-            summary = ats_optimizer.generate_summary(personal)
-            logger.info("ATS Optimizer: Generated optimized summary")
-        else:
-            summary = resume_content.get("professional_summary") or resume_content.get("summary") or ""
+        # Use LLM-generated professional summary - no fallbacks
+        summary = resume_content.get("professional_summary") or resume_content.get("summary") or ""
+        if not summary:
+            logger.error("CRITICAL: No professional summary found in resume content!")
         summary = escape_latex(summary)
 
         # Generate ATS-optimized skills (grouped from JD)
@@ -270,8 +271,9 @@ Return ONLY the complete corrected LaTeX code wrapped in ```latex ... ``` blocks
 
         # Generate ATS-optimized experience with measurable impact
         exp_section = ""
-        experiences = personal.get("experience") or resume_content.get("experience") or []
-        for exp in experiences:
+        # Prefer resume_content experience (has LLM bullets) over personal_info experience
+        experiences = resume_content.get("experience") or personal.get("experience") or []
+        for exp_idx, exp in enumerate(experiences):
             title = escape_latex(exp.get("title", ""))
             company = escape_latex(exp.get("company", ""))
             duration = escape_latex(exp.get("duration", ""))
@@ -281,21 +283,21 @@ Return ONLY the complete corrected LaTeX code wrapped in ```latex ... ``` blocks
             exp_section += f"\\resumeSubheading{{{title}}}{{{duration}}}{{{company}}}{{{location}}}\n"
             exp_section += "\\resumeItemListStart\n"
             
-            # Generate 3-5 ATS-optimized bullets per role
-            if ats_optimizer:
-                bullets = ats_optimizer.generate_experience_bullets(exp)
-                logger.info(f"ATS Optimizer: Generated {len(bullets)} optimized bullets for {title}")
-                for bullet in bullets:
+            # Only use LLM-generated bullets - no fallbacks
+            if exp.get("bullets"):
+                for bullet in exp.get("bullets", [])[:5]:
                     exp_section += f"\\resumeItem{{{escape_latex(bullet)}}}\n"
-            elif desc:
-                exp_section += f"\\resumeItem{{{desc}}}\n"
+            else:
+                # No bullets generated - log warning
+                logger.warning(f"No bullets generated for experience: {title} at {company}")
             
             exp_section += "\\resumeItemListEnd\n\n"
 
         # Projects (ATS-optimized if available)
         projects_section = ""
-        projects = personal.get("projects") or resume_content.get("projects") or []
-        for proj in projects:
+        # Prefer resume_content projects (has LLM bullets) over personal_info projects
+        projects = resume_content.get("projects") or personal.get("projects") or []
+        for proj_idx, proj in enumerate(projects):
             proj_name = escape_latex(proj.get("name", "Project"))
             proj_duration = escape_latex(proj.get("duration", ""))
             proj_tech = proj.get("technologies", [])
@@ -311,16 +313,14 @@ Return ONLY the complete corrected LaTeX code wrapped in ```latex ... ``` blocks
             projects_section += f"}}{{{proj_duration}}}\n"
             projects_section += "\\resumeItemListStart\n"
             
-            # If ATS optimizer available, generate optimized bullets
-            if ats_optimizer:
-                proj_bullets = ats_optimizer.generate_project_bullets(proj)
-                for bullet in proj_bullets[:3]:  # Max 3 bullets per project
+            # Only use LLM-provided project bullets - no fallbacks
+            if proj.get("bullets"):
+                for bullet in proj.get("bullets", [])[:3]:
                     projects_section += f"\\resumeItem{{{escape_latex(bullet)}}}\n"
-            elif proj_desc:
-                # Split description by periods or newlines to create bullets
-                bullets = [b.strip() for b in proj_desc.replace('\n', '. ').split('. ') if b.strip()]
-                for bullet in bullets[:3]:
-                    projects_section += f"\\resumeItem{{{escape_latex(bullet)}}}\n"
+            else:
+                # No bullets generated - log warning
+                logger.warning(f"No bullets generated for project: {proj_name}")
+
             
             projects_section += "\\resumeItemListEnd\n\n"
 
@@ -328,42 +328,46 @@ Return ONLY the complete corrected LaTeX code wrapped in ```latex ... ``` blocks
         awards_and_certifications_section = ""
 
         # Prefer combined field; fallback to legacy awards/certifications for backward compatibility
-        combined = personal.get("awards_and_certifications") or resume_content.get("awards_and_certifications") or []
+        combined = resume_content.get("certifications_with_descriptions") or personal.get("awards_and_certifications") or resume_content.get("awards_and_certifications") or []
         awards = personal.get("awards") or resume_content.get("awards") or []
-        certifications = personal.get("certifications") or resume_content.get("certifications") or []
+        certifications = resume_content.get("certifications") or personal.get("certifications") or resume_content.get("certifications_lines") or []
 
-        def build_award_line(entry: Dict[str, Any]) -> str:
+        def build_award_line(entry: Dict[str, Any], entry_idx: int = 0) -> str:
+            if isinstance(entry, str):
+                return escape_latex(entry)
             name_tex = escape_latex(entry.get("name", ""))
             issuer_tex = escape_latex(entry.get("issuer", ""))
             date_tex = escape_latex(entry.get("date", ""))
-            desc_tex = ""
+            desc_tex = escape_latex(entry.get("description", ""))
 
-            if ats_optimizer:
-                desc_tex = escape_latex(ats_optimizer.get_award_cert_description(entry))
-            else:
-                desc_tex = escape_latex(entry.get("description", ""))
-
-            line = f"\\textbf{{{name_tex}}}" if name_tex else ""
-            if issuer_tex:
-                line += f" (\\textbf{{{issuer_tex}}})"
-            if date_tex:
-                line += f" | {date_tex}"
-            if desc_tex:
-                line += f" — {desc_tex}"
-            return line
+            # Build single-line certification/award formatting
+            if name_tex or issuer_tex or date_tex:
+                line = f"{name_tex}"
+                if issuer_tex:
+                    line += f" | {issuer_tex}"
+                if date_tex:
+                    line += f" | {date_tex}"
+                # Add description if available (on same line or as sub-item)
+                if desc_tex:
+                    line += f" - {desc_tex}"
+                return line
+            return ""
 
         all_entries = []
 
         if combined:
-            for entry in combined:
-                all_entries.append(build_award_line(entry))
+            for entry_idx, entry in enumerate(combined):
+                all_entries.append(build_award_line(entry, entry_idx))
         else:
             # Legacy paths
+            cert_idx = 0
             for cert in certifications:
-                all_entries.append(build_award_line(cert))
+                all_entries.append(build_award_line(cert, cert_idx))
+                cert_idx += 1
 
             for award in awards:
-                all_entries.append(build_award_line(award))
+                all_entries.append(build_award_line(award, cert_idx))
+                cert_idx += 1
 
         # Render all entries as single bullet points (no duplication, no omission)
         for entry_text in all_entries:

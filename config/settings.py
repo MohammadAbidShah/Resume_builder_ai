@@ -8,9 +8,14 @@ load_dotenv()
 # API Keys
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.ai")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "groq-1")
+GROQ_API_URL = os.getenv("GROQ_API_URL", "https://api.groq.com")
 GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0"))
+
+# Model Stratification: Per-agent model selection (70B for content, 8B for validation)
+GROQ_CONTENT_GENERATOR_MODEL = os.getenv("GROQ_CONTENT_GENERATOR_MODEL", "llama-3.3-70b-versatile")
+GROQ_ATS_CHECKER_MODEL = os.getenv("GROQ_ATS_CHECKER_MODEL", "llama-3.1-8b-instant")
+GROQ_PDF_VALIDATOR_MODEL = os.getenv("GROQ_PDF_VALIDATOR_MODEL", "llama-3.1-8b-instant")
+GROQ_FEEDBACK_AGENT_MODEL = os.getenv("GROQ_FEEDBACK_AGENT_MODEL", "llama-3.1-8b-instant")
 
 # Groq Mock Mode (for offline testing)
 GROQ_MOCK_MODE = os.getenv("GROQ_MOCK_MODE", "true").lower() == "true"
@@ -18,6 +23,9 @@ GROQ_MOCK_MODE = os.getenv("GROQ_MOCK_MODE", "true").lower() == "true"
 # Model Configuration
 CONTENT_MODEL = "gemini-2.0-flash-exp"  # For content generation (free tier available)
 VALIDATION_MODEL = "gemini-2.0-flash-exp"  # For validation tasks (free tier available)
+
+# Network fallback (when real API is unreachable)
+ENABLE_NETWORK_FALLBACK = os.getenv("ENABLE_NETWORK_FALLBACK", "true").lower() == "true"
 
 # Quality Thresholds
 MIN_ATS_SCORE = 0.90  # 90%
@@ -36,13 +44,20 @@ MAX_ITERATIONS = 2
 ITERATION_TIMEOUT = 120  # seconds per iteration
 
 # File Paths
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "outputs")
+BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
+INPUT_DIR = os.path.join(BASE_DIR, "input")
+INPUT_JOB_FILE = os.path.join(INPUT_DIR, "input_data.txt")
+INPUT_PERSONAL_FILE = os.path.join(INPUT_DIR, "personal_info.json")
+TEMPLATE_DIR = os.path.join(INPUT_DIR, "templates")
+TEMPLATE_FILE = os.path.join(TEMPLATE_DIR, "resume_template.tex")
+
+OUTPUT_DIR = os.path.join(BASE_DIR, "outputs")
 RESUME_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "resumes")
 LATEX_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "latex")
 PDF_OUTPUT_DIR = os.path.join(OUTPUT_DIR, "pdfs")
 
-# Create output directories if they don't exist
-for dir_path in [RESUME_OUTPUT_DIR, LATEX_OUTPUT_DIR, PDF_OUTPUT_DIR]:
+# Create directories if they don't exist
+for dir_path in [INPUT_DIR, TEMPLATE_DIR, RESUME_OUTPUT_DIR, LATEX_OUTPUT_DIR, PDF_OUTPUT_DIR]:
     os.makedirs(dir_path, exist_ok=True)
 
 # Logging Configuration
@@ -62,15 +77,24 @@ __all__ = [
     "GOOGLE_API_KEY",
     "GROQ_API_KEY",
     "GROQ_API_URL",
-    "GROQ_MODEL",
     "GROQ_TEMPERATURE",
+    "GROQ_CONTENT_GENERATOR_MODEL",
+    "GROQ_ATS_CHECKER_MODEL",
+    "GROQ_PDF_VALIDATOR_MODEL",
+    "GROQ_FEEDBACK_AGENT_MODEL",
     "GROQ_MOCK_MODE",
+    "ENABLE_NETWORK_FALLBACK",
     "CONTENT_MODEL",
     "VALIDATION_MODEL",
     "MIN_ATS_SCORE",
     "KEYWORD_MATCH_THRESHOLD",
     "PDF_QUALITY_THRESHOLD",
     "MAX_ITERATIONS",
+    "INPUT_DIR",
+    "INPUT_JOB_FILE",
+    "INPUT_PERSONAL_FILE",
+    "TEMPLATE_DIR",
+    "TEMPLATE_FILE",
     "OUTPUT_DIR",
     "RESUME_OUTPUT_DIR",
     "LATEX_OUTPUT_DIR",

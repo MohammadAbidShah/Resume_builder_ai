@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any
 from tools.groq_client import groq_generate
 from langchain_core.messages import HumanMessage, SystemMessage
-from config.settings import VALIDATION_MODEL, PDF_QUALITY_THRESHOLD
+from config.settings import VALIDATION_MODEL, PDF_QUALITY_THRESHOLD, GROQ_PDF_VALIDATOR_MODEL
 from config.prompts import SYSTEM_PROMPTS
 from tools import validate_latex_syntax, validate_pdf_quality
 from utils.logger import logger
@@ -62,7 +62,7 @@ class PDFValidatorAgent:
         
         try:
             prompt = self.system_prompt + "\n\n" + user_prompt
-            response_text = groq_generate(prompt, max_tokens=2048, temperature=0)
+            response_text = groq_generate(prompt, max_tokens=2048, temperature=0, model=GROQ_PDF_VALIDATOR_MODEL)
             logger.info("PDF Validator: Received analysis from Groq API")
             
             # Parse LLM response

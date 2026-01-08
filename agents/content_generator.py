@@ -3,7 +3,7 @@ import json
 import re
 from typing import Dict, Any, List, Tuple
 from tools.groq_client import groq_generate
-from config.settings import CONTENT_MODEL, CONTENT_GENERATION_TEMPERATURE
+from config.settings import CONTENT_MODEL, CONTENT_GENERATION_TEMPERATURE, GROQ_CONTENT_GENERATOR_MODEL
 from config.prompts import SYSTEM_PROMPTS
 from tools import parse_job_description, extract_technical_skills, extract_soft_skills
 from utils.logger import logger
@@ -38,24 +38,63 @@ class ResumeContentGeneratorAgent:
         "participated in", "involved in", "dealt with", "handled"
     ]
 
-    # Outcome and tool rotations to enforce uniqueness and variation
-    OUTCOME_ROTATIONS = [
-        ("speed", "reducing cycle time by 20%"),
-        ("accuracy", "improving data accuracy by 18%"),
-        ("cost", "cutting costs by 12%"),
-        ("reliability", "boosting reliability to 99.9%"),
-        ("adoption", "increasing stakeholder adoption by 25%"),
-        ("compliance", "meeting compliance standards with zero audit findings")
-    ]
-
-    TOOL_ROTATIONS = [
-        "SQL", "Python", "Power BI", "Tableau", "statistics", "automation"
-    ]
+    # No fallback rotations - all bullets must be generated dynamically by LLM
     
     def __init__(self):
         self.system_prompt = self._build_enhanced_system_prompt()
         self.all_strong_verbs = [verb for verbs in self.STRONG_VERBS.values() for verb in verbs]
-    
+        # Master bullet prompt for XYZ/STAR FAANG-style generation with hard negative constraints
+        self.master_bullet_prompt = """### ROLE
+Senior Technical Resume Writer (FAANG Specialty).
+
+### TASK
+Generate JD-anchored professional summary and bullets that reflect the user's real projects, roles, and certifications. Always adapt to the specific job description and personal info provided—no canned text.
+
+### CRITICAL CONSTRAINTS (DO NOT VIOLATE)
+1. NO NONSENSE: Never say "improved [Language/Tool]." You improve a BUSINESS METRIC (speed, cost, accuracy) using a tool.
+2. NO ROBOTIC TEMPLATES: Every bullet must differ in verb, structure, metric, and context.
+3. REAL-WORLD IMPACT: Tie outcomes to quantified gains (%, $, time, uptime, users).
+4. JD-ALIGNMENT: Prioritize {target_keywords}. Mirror the role's responsibilities, tools, and focus areas from the JD.
+5. PROFESSIONAL SUMMARY: Generate 2-3 sentences highlighting years of experience, key technologies from JD, and quantified achievements. Must be role-specific and keyword-rich.
+6. PROJECT COVERAGE: For EACH project listed, produce exactly 3 distinct bullets (XYZ/STAR) using that project's name/tech stack.
+7. CERT DESCRIPTIONS: For EACH certification listed, produce 1 concise line describing verified skills/knowledge and relevance to the JD.
+8. MANDATORY GENERATION: You MUST generate professional summary, 4 experience bullets, 3 bullets per project, and 1 description per certification. Empty output is NOT acceptable.
+
+### INPUT
+User Personal Info (name, years of experience, education):
+{personal_info}
+
+User Data (experience, projects, certifications):
+{raw_experience}
+
+Project Names: {project_names}
+Target Job Description: {target_jd}
+TARGET_KEYWORDS: {target_keywords}
+
+### OUTPUT FORMAT
+Return ONLY valid JSON with ALL fields populated:
+{{
+    "professional_summary": "2-3 sentence summary with years of experience, key JD technologies, and quantified achievements tailored to target role",
+    "experience_bullets": ["bullet 1 with metrics and keywords", "bullet 2 with metrics", "bullet 3 with metrics", "bullet 4 with metrics"],
+    "project_bullets": {{
+        "project_0": ["project bullet 1 with XYZ format", "project bullet 2 with STAR format", "project bullet 3 with metrics"],
+        "project_1": ["project bullet 1 with XYZ format", "project bullet 2 with STAR format", "project bullet 3 with metrics"]
+    }},
+    "certification_descriptions": {{
+        "cert_0": "Certification description mentioning validated skills and JD relevance",
+        "cert_1": "Certification description mentioning validated skills and JD relevance"
+    }}
+}}
+
+### REMEMBER
+- NEVER return empty strings, arrays or objects
+- ALWAYS generate professional summary (2-3 sentences, keyword-rich, quantified)
+- ALWAYS generate exactly 4 experience bullets
+- ALWAYS generate exactly 3 bullets per project
+- ALWAYS generate exactly 1 description per certification
+- Base content on user's actual experience but align with JD keywords and requirements
+- Professional summary should immediately signal the target role and value proposition
+"""
     def _build_enhanced_system_prompt(self) -> str:
         """Build comprehensive system prompt for FAANG-level content generation."""
         return """You are an expert resume writer specializing in FAANG (Meta, Apple, Amazon, Netflix, Google) and top-tier tech company resumes. You have helped 1000+ candidates get interviews at these companies.
@@ -77,8 +116,6 @@ class ResumeContentGeneratorAgent:
 
 ### 3. STAR METHOD (Situation-Task-Action-Result)
 Structure bullets as: [Action Verb] + [What] + [How/Technologies] + [Quantified Impact]
-
-Example: "Architected microservices platform using Python/FastAPI and Kubernetes, reducing deployment time by 60% and enabling 10+ teams to ship features independently"
 
 ### 4. KEYWORD OPTIMIZATION
 - Seamlessly integrate job description keywords into bullets (15-20% keyword density)
@@ -118,9 +155,9 @@ Return ONLY valid JSON with this exact structure:
             "location": "San Francisco, CA",
             "duration": "Jan 2021 - Present",
             "bullets": [
-                "Architected microservices platform using Python/FastAPI and Kubernetes, reducing deployment time by 60% and enabling 10+ teams to ship features independently",
-                "Optimized database queries and implemented Redis caching, improving API response times from 450ms to 95ms (79% improvement) and supporting 3x traffic growth",
-                "Led migration of monolithic application to event-driven architecture using Kafka, processing 2M+ events/day with 99.9% reliability"
+                "",
+                "",
+                ""
             ]
         }
     ],
@@ -138,7 +175,7 @@ Return ONLY valid JSON with this exact structure:
         {
             "name": "Open Source Contribution - Django REST Framework",
             "technologies": ["Python", "Django", "REST APIs"],
-            "description": "Contributed 15+ PRs improving serialization performance by 25%; 500+ GitHub stars",
+            "description": "",
             "link": "github.com/username/project"
         }
     ],
@@ -220,11 +257,12 @@ Before returning, verify:
             response_text = groq_generate(
                 full_prompt, 
                 max_tokens=4096, 
-                temperature=0.3  # Slightly higher for creative bullet points
+                temperature=0.7,  # Higher to avoid repetitive outputs
+                model=GROQ_CONTENT_GENERATOR_MODEL
             )
             logger.info("Received response from Groq API")
             
-            # Parse and validate JSON
+            # Parse and validate JSON from main prompt
             is_valid, resume_content = validate_json_output(response_text)
             
             if not is_valid:
@@ -234,7 +272,38 @@ Before returning, verify:
                     "error": "Invalid JSON output from LLM",
                     "raw_output": response_text
                 }
-            
+
+            # CRITICAL: Call master bullet generator - this is the PRIMARY content source
+            bullet_payload = self._generate_master_bullets(job_description, personal_info, job_context)
+            if bullet_payload:
+                resume_content["_llm_bullets"] = True
+                resume_content["professional_summary"] = bullet_payload.get("professional_summary", "")
+                resume_content["experience_bullets"] = bullet_payload.get("experience_bullets", [])
+                resume_content["project_bullets"] = bullet_payload.get("project_bullets", {})
+                resume_content["certification_descriptions"] = bullet_payload.get("certification_descriptions", {})
+                
+                # Validate that content was actually generated
+                if not resume_content["professional_summary"]:
+                    logger.error("CRITICAL: Master prompt returned EMPTY professional summary!")
+                    # Attempt targeted re-prompt to generate professional summary
+                    summary_text = self._generate_professional_summary(job_description, personal_info, job_context)
+                    if summary_text and summary_text.strip():
+                        resume_content["professional_summary"] = summary_text.strip()
+                        logger.info("Filled professional summary via targeted re-prompt")
+                    else:
+                        logger.error("Re-prompt failed to produce a professional summary")
+                if not resume_content["experience_bullets"]:
+                    logger.error("CRITICAL: Master prompt returned EMPTY experience bullets!")
+                if not resume_content["project_bullets"]:
+                    logger.warning("Master prompt returned EMPTY project bullets")
+                if not resume_content["certification_descriptions"]:
+                    logger.warning("Master prompt returned EMPTY certification descriptions")
+                    
+                logger.info(f"Master content generated - Summary: {len(resume_content['professional_summary'])} chars, Experience: {len(resume_content['experience_bullets'])} bullets, Projects: {len(resume_content['project_bullets'])} entries")
+            else:
+                logger.error("CRITICAL: Master bullet generation FAILED completely - no payload returned!")
+                # This should never happen in production
+
             # Post-processing: Validate and enhance content (inject personal info early)
             resume_content["personal_info"] = personal_info
             enhanced_content = self._post_process_content(
@@ -266,6 +335,57 @@ Before returning, verify:
                 "success": False,
                 "error": str(e)
             }
+
+    def _generate_professional_summary(
+        self,
+        job_description: str,
+        personal_info: Dict[str, Any],
+        job_context: Dict[str, Any]
+    ) -> str:
+        """Generate a 2-3 sentence professional summary aligned to the JD.
+
+        Uses a focused prompt to avoid empty outputs and ensure role relevance,
+        metrics, and keyword alignment. Returns plain text.
+        """
+        try:
+            must_have = ", ".join(job_context.get("must_have_skills", [])[:8])
+            keywords_list = [kw if isinstance(kw, str) else kw[0] for kw in job_context.get("critical_keywords", [])]
+            keywords_str = ", ".join(keywords_list[:12])
+            years = len(personal_info.get("experience", []))
+            current_role = personal_info.get("experience", [{}])[0].get("title", "") if personal_info.get("experience") else ""
+            name = personal_info.get("name", "")
+            edu_short = personal_info.get("education", [])
+            edu_str = json.dumps(edu_short[:1]) if edu_short else "[]"
+
+            prompt = f"""
+You are a senior technical resume writer for data roles (Analyst/Scientist/Engineer).
+Write a professional summary of 2-3 sentences tailored to the target job.
+
+Strict requirements:
+- Mention years of experience (~{years} roles) and current role ('{current_role}') if relevant.
+- Integrate JD-aligned keywords naturally: {keywords_str}
+- Include at least one quantified achievement (%, $, time, scale, users).
+- Convey domain impact and value proposition specific to the JD.
+- Avoid generic fluff and templated phrasing.
+
+Context:
+- Candidate: {name}
+- Must-Have Skills: {must_have}
+- Education: {edu_str}
+- Target JD (excerpt):\n{job_description[:800]}
+
+Return ONLY the summary text (no JSON, no preamble).
+"""
+            response = groq_generate(prompt, max_tokens=256, temperature=0.3, model=GROQ_CONTENT_GENERATOR_MODEL)
+            # Clean up whitespace and ensure 2-3 sentences by truncation if overly long
+            summary = (response or "").strip()
+            # Basic sanity: enforce max ~3 sentences
+            sentences = re.split(r"(?<=[.!?])\s+", summary)
+            summary = " ".join(sentences[:3]).strip()
+            return summary
+        except Exception as exc:
+            logger.warning(f"Professional summary generation failed: {exc}")
+            return ""
     
     def _extract_job_requirements(self, job_description: str) -> Dict[str, Any]:
         """Enhanced job description parsing with keyword importance ranking."""
@@ -440,29 +560,68 @@ Return ONLY the improved JSON structure.
         Post-process generated content to ensure quality.
         Validates and fixes common issues.
         """
-        # Backfill empty sections from provided personal info
+        # Ensure basic structure exists, but never generate fallback bullets
         if not content.get("experience"):
+            # Only add structure without bullets - bullets must come from LLM
             content["experience"] = self._backfill_experience(personal_info, job_context)
         if not content.get("education"):
             content["education"] = personal_info.get("education", [])
         if not content.get("skills"):
             content["skills"] = personal_info.get("skills", {})
 
-        # Fix action verbs and enrich bullets with metrics/keywords
+        # Override bullets with master prompt payload when available
+        if content.get("experience_bullets") and content.get("experience"):
+            bullets = content["experience_bullets"]
+            for exp in content["experience"]:
+                exp["bullets"] = bullets
+        
+        # Handle new project_bullets structure (dict with project_0, project_1, etc.)
+        if content.get("project_bullets"):
+            projects = content.get("projects") or personal_info.get("projects", [])
+            if projects:
+                project_bullets_dict = content["project_bullets"]
+                if isinstance(project_bullets_dict, dict):
+                    # New format: {"project_0": [3 bullets], "project_1": [3 bullets]}
+                    for idx, proj in enumerate(projects):
+                        proj_key = f"project_{idx}"
+                        if proj_key in project_bullets_dict:
+                            proj["bullets"] = project_bullets_dict[proj_key]
+                        else:
+                            # Fallback if key missing: leave empty so downstream steps can generate or skip
+                            proj["bullets"] = []
+                else:
+                    # Old format: simple list - distribute evenly
+                    per_proj = max(1, len(project_bullets_dict) // len(projects))
+                    for idx, proj in enumerate(projects):
+                        start = idx * per_proj
+                        proj["bullets"] = project_bullets_dict[start:start+per_proj] or project_bullets_dict
+                content["projects"] = projects
+        
+        # Handle certification descriptions (dict with cert_0, cert_1, etc.)
+        if content.get("certification_descriptions"):
+            certs = personal_info.get("awards_and_certifications", [])
+            cert_desc_dict = content["certification_descriptions"]
+            if isinstance(cert_desc_dict, dict):
+                for idx, cert in enumerate(certs):
+                    cert_key = f"cert_{idx}"
+                    if cert_key in cert_desc_dict:
+                        cert["description"] = cert_desc_dict[cert_key]
+                content["certifications_with_descriptions"] = certs
+
+        # Only fix action verbs - no metric enrichment (LLM handles everything)
         if "experience" in content:
             for exp in content["experience"]:
-                if "bullets" in exp:
+                if "bullets" in exp and exp["bullets"]:
+                    # Only fix weak action verbs, don't add content
                     enriched_bullets = []
                     for bullet in exp["bullets"]:
-                        fixed = self._fix_bullet_action_verb(bullet)
-                        enriched = self._enrich_bullet_with_metrics_and_keywords(
-                            fixed,
-                            job_context
-                        )
-                        enriched_bullets.append(enriched)
+                        if bullet and bullet.strip():  # Only process non-empty bullets
+                            fixed = self._fix_bullet_action_verb(bullet)
+                            enriched_bullets.append(fixed)
                     exp["bullets"] = enriched_bullets
 
         # Enforce cross-section uniqueness (experience/projects/certifications)
+        # (LLM already instructed; keep guard active)
         self._apply_uniqueness_guards(content, job_context)
         
         # Ensure metadata exists
@@ -508,86 +667,22 @@ Return ONLY the improved JSON structure.
         else:
             return "Implemented"  # Safe default
 
-    def _enrich_bullet_with_metrics_and_keywords(
-        self,
-        bullet: str,
-        job_context: Dict[str, Any]
-    ) -> str:
-        """Add metrics and missing must-have keywords to a bullet if absent."""
-        metric_pattern = r"\d+[%$KMB]?|\d+[x×]|\d+[-–]\d+%?"
-        has_metric = bool(re.search(metric_pattern, bullet))
-
-        # Inject a metric if missing
-        if not has_metric:
-            metric_phrases = [
-                "improving reliability by 15%",
-                "reducing cycle time by 20%",
-                "cutting costs by 10%",
-                "accelerating delivery by 25%",
-                "boosting efficiency by 30%"
-            ]
-            add_on = metric_phrases[hash(bullet) % len(metric_phrases)]
-            if bullet.endswith('.'):
-                bullet = bullet[:-1]
-            bullet = f"{bullet} ({add_on})"
-
-        # Inject a missing must-have keyword if not already present
-        resume_lower = bullet.lower()
-        for kw, _ in job_context.get("critical_keywords", [])[:5]:
-            if kw.lower() not in resume_lower:
-                bullet = f"{bullet} using {kw}"
-                resume_lower = bullet.lower()
-                break  # add just one to avoid stuffing
-
-        return bullet
-
     def _backfill_experience(
         self,
         personal_info: Dict[str, Any],
         job_context: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """Create experience bullets from personal info when LLM output is empty."""
+        """Return experience structure without bullets - LLM must generate all content dynamically."""
+        # No fallback bullets - force dynamic generation from master bullet prompt
         fallback_experience = []
-        metric_templates = [
-            "reducing cycle time by 22%",
-            "improving data accuracy by 18%",
-            "cutting reporting costs by 12%",
-            "boosting reliability to 99.9%",
-            "increasing stakeholder adoption by 25%",
-            "meeting compliance standards with zero audit findings"
-        ]
-
-        keywords = [kw for kw, _ in job_context.get("critical_keywords", [])]
-        keyword = keywords[0] if keywords else "analytics"
-
-        for idx, role in enumerate(personal_info.get("experience", [])):
-            bullets = []
-            base_bullet = f"Implemented {keyword} workflows across datasets"
-            enriched = self._enrich_bullet_with_metrics_and_keywords(
-                base_bullet,
-                job_context
-            )
-            bullets.append(enriched)
-
-            extra_metric = metric_templates[idx % len(metric_templates)]
-            alt_keyword = keywords[(idx + 1) % len(keywords)] if len(keywords) > 1 else keyword
-            bullets.append(
-                f"Optimized reporting pipelines {extra_metric} using {alt_keyword}"
-            )
-
-            # Add a third bullet to diversify verb/object/metric rotation
-            outcome_label, outcome_phrase = self.OUTCOME_ROTATIONS[idx % len(self.OUTCOME_ROTATIONS)]
-            tool_focus = self.TOOL_ROTATIONS[idx % len(self.TOOL_ROTATIONS)]
-            bullets.append(
-                f"Engineered validation routines {outcome_phrase} with {tool_focus}"
-            )
-
+        
+        for role in personal_info.get("experience", []):
             fallback_experience.append({
                 "title": role.get("title", ""),
                 "company": role.get("company", ""),
                 "location": role.get("location", ""),
                 "duration": role.get("duration", ""),
-                "bullets": bullets
+                "bullets": []  # Empty - must be populated by LLM
             })
 
         return fallback_experience
@@ -623,8 +718,6 @@ Return ONLY the improved JSON structure.
 
         used_ngrams = set()
         used_trios = set()
-        outcome_idx = 0
-        tool_idx = 0
 
         for bullets in bullet_lists:
             for i, bullet in enumerate(bullets):
@@ -632,13 +725,10 @@ Return ONLY the improved JSON structure.
                     bullet,
                     used_ngrams,
                     used_trios,
-                    outcome_idx,
-                    tool_idx,
+                    0,
+                    0,
                     job_context
                 )
-                # Rotate outcome/tool for each bullet processed
-                outcome_idx = (outcome_idx + 1) % len(self.OUTCOME_ROTATIONS)
-                tool_idx = (tool_idx + 1) % len(self.TOOL_ROTATIONS)
                 bullets[i] = rewritten
 
     def _enforce_bullet_uniqueness(
@@ -686,26 +776,7 @@ Return ONLY the improved JSON structure.
         job_context: Dict[str, Any]
     ) -> str:
         """Apply outcome/tool rotation and metric/keyword injection to break similarity."""
-        outcome_label, outcome_phrase = self.OUTCOME_ROTATIONS[outcome_idx % len(self.OUTCOME_ROTATIONS)]
-        tool_focus = self.TOOL_ROTATIONS[tool_idx % len(self.TOOL_ROTATIONS)]
-
-        # Ensure metric phrase is present and distinct
-        if outcome_phrase.lower() not in bullet.lower():
-            if bullet.endswith('.'):
-                bullet = bullet[:-1]
-            bullet = f"{bullet} ({outcome_phrase})"
-
-        # Ensure tool focus is varied
-        if tool_focus.lower() not in bullet.lower():
-            bullet = f"{bullet} using {tool_focus}"
-
-        # Inject a different must-have keyword if available
-        resume_lower = bullet.lower()
-        for kw, _ in job_context.get("critical_keywords", [])[:5]:
-            if kw.lower() not in resume_lower:
-                bullet = f"{bullet} with {kw}"
-                break
-
+        # No longer used; LLM provides variation
         return bullet
     
     def _calculate_metadata(
@@ -764,6 +835,60 @@ Return ONLY the improved JSON structure.
             "keyword_coverage": round(keyword_coverage, 2),
             "matched_keywords_count": matched_keywords
         }
+
+    def _generate_master_bullets(
+        self,
+        job_description: str,
+        personal_info: Dict[str, Any],
+        job_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Call the master prompt to get experience/project/certification bullets via LLM."""
+        try:
+            target_keywords = [kw if isinstance(kw, str) else kw[0] for kw in job_context.get("critical_keywords", [])]
+            user_resume_data = {
+                "experience": personal_info.get("experience", []),
+                "projects": personal_info.get("projects", []),
+                "awards_and_certifications": personal_info.get("awards_and_certifications", [])
+            }
+            personal_info_summary = {
+                "name": personal_info.get("name", ""),
+                "years_of_experience": len(personal_info.get("experience", [])),
+                "education": personal_info.get("education", []),
+                "current_role": personal_info.get("experience", [{}])[0].get("title", "") if personal_info.get("experience") else ""
+            }
+            project_names = [p.get("name", f"project_{idx}") for idx, p in enumerate(user_resume_data.get("projects", []))]
+            prompt = self.master_bullet_prompt.format(
+                personal_info=json.dumps(personal_info_summary, indent=2),
+                raw_experience=json.dumps(user_resume_data, indent=2),
+                target_jd=job_description,
+                target_keywords=json.dumps(target_keywords),
+                project_names=json.dumps(project_names)
+            )
+            response_text = groq_generate(prompt, max_tokens=2048, temperature=0.7, model=GROQ_CONTENT_GENERATOR_MODEL)
+            is_valid, payload = validate_json_output(response_text)
+            if not is_valid:
+                logger.warning("Master bullet prompt returned invalid JSON; skipping overrides")
+                logger.warning(response_text)
+                return {}
+            
+            # Handle old format (simple list) for backward compatibility
+            if isinstance(payload, list):
+                return {
+                    "experience_bullets": payload,
+                    "project_bullets": {},
+                    "certification_descriptions": {}
+                }
+            
+            # New format with structured project_bullets and cert descriptions
+            result = {
+                "experience_bullets": payload.get("experience_bullets", []),
+                "project_bullets": payload.get("project_bullets", {}),
+                "certification_descriptions": payload.get("certification_descriptions", {})
+            }
+            return result
+        except Exception as exc:
+            logger.warning(f"Master bullet generation failed: {exc}")
+            return {}
     
     def _generate_quality_report(
         self,

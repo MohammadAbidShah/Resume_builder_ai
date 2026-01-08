@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any
 from tools.groq_client import groq_generate
 from langchain_core.messages import HumanMessage, SystemMessage
-from config.settings import CONTENT_MODEL, MIN_ATS_SCORE, PDF_QUALITY_THRESHOLD
+from config.settings import CONTENT_MODEL, MIN_ATS_SCORE, PDF_QUALITY_THRESHOLD, GROQ_FEEDBACK_AGENT_MODEL
 from config.prompts import SYSTEM_PROMPTS
 from utils.logger import logger
 from utils.validators import validate_json_output
@@ -63,7 +63,7 @@ class FeedbackAgent:
         
         try:
             prompt = self.system_prompt + "\n\n" + user_prompt
-            response_text = groq_generate(prompt, max_tokens=2048, temperature=0)
+            response_text = groq_generate(prompt, max_tokens=2048, temperature=0, model=GROQ_FEEDBACK_AGENT_MODEL)
             logger.info("Feedback Agent: Received feedback from Groq API")
             
             # Parse feedback

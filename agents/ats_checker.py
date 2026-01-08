@@ -1,8 +1,9 @@
 """ATS Checker Agent - Agent 3."""
 import json
+import re
 from typing import Dict, Any
 from tools.groq_client import groq_generate
-from config.settings import VALIDATION_MODEL, MIN_ATS_SCORE
+from config.settings import VALIDATION_MODEL, MIN_ATS_SCORE, GROQ_ATS_CHECKER_MODEL
 from config.prompts import SYSTEM_PROMPTS
 from tools import check_ats_compatibility, extract_plain_text_from_latex
 from utils.logger import logger
@@ -54,6 +55,12 @@ class ATSCheckerAgent:
         # Use tool for basic ATS check
         tool_results = check_ats_compatibility(resume_text, job_description)
         logger.info(f"ATS Checker Tool: Score = {tool_results['ats_score']:.1f}%")
+
+        # Logic validator for hallucinations / tool-as-metric errors
+        logic_issues = self._logic_validate(resume_text)
+        if logic_issues:
+            tool_results.setdefault("formatting_issues", []).extend(logic_issues)
+            tool_results.setdefault("ats_blocking_issues", []).extend(logic_issues)
         
         # Use LLM for detailed analysis and reasoning
         user_prompt = self._build_analysis_prompt(
@@ -64,7 +71,7 @@ class ATSCheckerAgent:
         
         try:
             prompt = self.system_prompt + "\n\n" + user_prompt
-            response_text = groq_generate(prompt, max_tokens=2048, temperature=0)
+            response_text = groq_generate(prompt, max_tokens=2048, temperature=0, model=GROQ_ATS_CHECKER_MODEL)
             logger.info("ATS Checker: Received analysis from Groq API")
             
             # Parse LLM response
@@ -161,6 +168,7 @@ PRELIMINARY ANALYSIS:
 - Keywords Present: {len(tool_results['keywords_present'])}
 - Keywords Missing: {len(tool_results['keywords_missing'])}
 - Blocking Issues: {', '.join(tool_results['ats_blocking_issues'][:3]) if tool_results['ats_blocking_issues'] else 'None'}
+ - Logic Issues: {', '.join(tool_results.get('formatting_issues', [])[:3]) if tool_results.get('formatting_issues') else 'None'}
 
 Please provide detailed analysis as JSON:
 {{
@@ -173,5 +181,27 @@ Please provide detailed analysis as JSON:
 }}
 """
         return prompt
+
+    def _logic_validate(self, resume_text: str) -> list:
+        """Detect hallucinations and tool-as-metric misuse (e.g., 'improved Python')."""
+        issues = []
+        lower = resume_text.lower()
+        bad_phrases = [
+            "improved python", "improved sql", "improved tableau", "improved power bi",
+            "covered python", "covered sql", "covered tableau", "covered power bi"
+        ]
+        for phrase in bad_phrases:
+            if phrase in lower:
+                issues.append(f"Hallucination/Logical Error: '{phrase}'")
+
+        # Repeated identical metrics
+        metrics = re.findall(r"\b\d+%\b", lower)
+        if metrics:
+            seen = set()
+            for m in metrics:
+                if m in seen:
+                    issues.append(f"Reused metric {m} across bullets")
+                seen.add(m)
+        return issues
 
 __all__ = ["ATSCheckerAgent"]

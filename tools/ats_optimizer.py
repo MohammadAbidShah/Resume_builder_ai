@@ -64,6 +64,16 @@ class ATSOptimizer:
         # Expanded tech terms covering ML, data science, analytics, backend
         tech_terms = {
             'python', 'r', 'java', 'scala', 'javascript', 'typescript', 'bash',
+            'react', 'react.js', 'reactjs', 'redux', 'redux toolkit', 'zustand',
+            'next.js', 'nextjs', 'vue', 'vue.js', 'vuejs', 'nuxt', 'angular',
+            'svelte', 'sveltekit', 'astro', 'lit', 'web components',
+            'css', 'css3', 'scss', 'sass', 'less', 'tailwind', 'bootstrap',
+            'html', 'html5', 'semantic html', 'aria', 'accessibility', 'a11y',
+            'core web vitals', 'lighthouse', 'performance optimization', 'bundle size',
+            'webpack', 'vite', 'rollup', 'parcel', 'babel',
+            'storybook', 'design system', 'component library',
+            'responsive design', 'cross browser', 'testing library', 'jest', 'cypress',
+            'rest', 'restful', 'graphql', 'apis',
             'oop', 'functional programming', 'data structures', 'algorithms',
             'pandas', 'numpy', 'scipy', 'statsmodels', 'polars',
             'data cleaning', 'data wrangling', 'data preprocessing',
@@ -185,6 +195,11 @@ class ATSOptimizer:
             'Product Analyst',
             'Operations Analyst',
             'Analytics Engineer',
+
+            'Frontend Developer', 'Front-End Developer', 'Front End Developer',
+            'Senior Frontend Developer', 'Senior Front-End Developer',
+            'Frontend Engineer', 'Front-End Engineer', 'UI Engineer', 'React Developer',
+            'Senior UI Engineer', 'Software Engineer, Frontend',
 
             'Data Scientist',
             'Senior Data Scientist',
@@ -321,6 +336,17 @@ class ATSOptimizer:
                 'performance optimization', 'latency',
                 'scalability', 'high availability',
                 'docker', 'kubernetes'
+            ],
+
+            'frontend': [
+                'frontend', 'front-end', 'ui engineer', 'web developer',
+                'react', 'react.js', 'reactjs', 'next.js', 'nextjs',
+                'vue', 'vue.js', 'vuejs', 'nuxt', 'angular', 'svelte', 'astro',
+                'javascript', 'typescript', 'css', 'css3', 'sass', 'scss', 'tailwind', 'bootstrap',
+                'html', 'html5', 'semantic html', 'aria', 'accessibility', 'a11y',
+                'design system', 'component library', 'storybook',
+                'responsive', 'cross browser', 'core web vitals', 'lighthouse', 'performance', 'bundle size',
+                'webpack', 'vite', 'rollup', 'parcel'
             ],
 
             'cloud': [
@@ -677,164 +703,13 @@ class ATSOptimizer:
         return skills_from_jd
     
     def generate_summary(self, personal_info: Dict[str, Any]) -> str:
-        """Generate 2-3 line ATS-optimized summary fully derived from JD."""
-        # Extract actual experience from personal_info
-        experience_list = personal_info.get("experience", [])
-        
-        # Determine actual experience level
-        if len(experience_list) == 0:
-            years_exp = "entry-level"
-        elif len(experience_list) == 1:
-            # Check if intern or junior
-            title = experience_list[0].get("title", "").lower()
-            if "intern" in title:
-                years_exp = "aspiring"
-            else:
-                years_exp = "1+ years"
-        else:
-            years_exp = f"{len(experience_list)}+ years"
-        
-        # Extract top 3 technologies from JD-derived skills
-        flat_skills = [s for lst in self.skills_from_jd.values() for s in lst]
-        matched_techs = flat_skills[:3] if flat_skills else ["Python", "SQL"]
-        
-        # Extract key responsibilities from JD for summary
-        resp_keywords = []
-        if 'ml' in self.domain_context or 'data_science' in self.domain_context:
-            ml_keywords = [k for k in ['modeling', 'ml', 'machine learning', 'prediction', 'deployment'] if k in self.jd]
-            resp_keywords.extend(ml_keywords[:2])
-        if 'analytics' in self.domain_context:
-            analytics_keywords = [k for k in ['analytics', 'dashboard', 'reporting', 'visualization'] if k in self.jd]
-            resp_keywords.extend(analytics_keywords[:2])
-        if 'data_engineering' in self.domain_context:
-            de_keywords = [k for k in ['pipeline', 'etl', 'data engineering', 'spark'] if k in self.jd]
-            resp_keywords.extend(de_keywords[:2])
-        
-        # Build domain-specific summary
-        if self.domain_context in ['ml', 'data_science']:
-            if years_exp == "aspiring":
-                summary = f"Aspiring {self.target_role} with hands-on experience in {', '.join(matched_techs)}. Completed projects in model development, experimentation, and deployment. Strong foundation in ML frameworks and statistical methods with proven ability to deliver data-driven solutions."
-            elif years_exp == "entry-level":
-                summary = f"Entry-level {self.target_role} with practical experience in {', '.join(matched_techs)}. Demonstrated skills through ML projects covering model building, evaluation, and deployment. Eager to contribute to predictive modeling and data science initiatives."
-            else:
-                summary = f"Impact-focused {self.target_role} with {years_exp} of experience building ML models and data-driven solutions using {', '.join(matched_techs)}. Proven track record in model development, deployment, and cross-functional collaboration. Strong expertise in Python, ML frameworks, and translating business problems into scalable solutions."
-        elif self.domain_context == 'analytics':
-            if years_exp == "aspiring":
-                summary = f"Aspiring {self.target_role} with hands-on experience in {', '.join(matched_techs)}. Completed internship focused on data analysis, reporting, and data quality. Strong foundation in Python, SQL, and modern analytics practices with proven ability to deliver insights for stakeholders."
-            elif years_exp == "entry-level":
-                summary = f"Entry-level {self.target_role} with strong technical foundation in {', '.join(matched_techs)}. Demonstrated experience through academic and personal analytics projects. Eager to contribute to data quality, reporting, and insight generation."
-            else:
-                summary = f"Impact-focused {self.target_role} with {years_exp} of expertise in data analysis, modeling, and reporting using {', '.join(matched_techs)}. Proven track record building dashboards, ensuring data accuracy, and delivering stakeholder-ready insights. Strong background in SQL, Python, and modern BI tooling."
-        elif self.domain_context == 'data_engineering':
-            if years_exp == "aspiring":
-                summary = f"Aspiring {self.target_role} with hands-on experience in {', '.join(matched_techs)}. Built data pipelines and ETL workflows in academic and project settings. Strong foundation in Python, SQL, and pipeline orchestration."
-            else:
-                summary = f"Impact-focused {self.target_role} with {years_exp} of experience designing and building scalable data pipelines using {', '.join(matched_techs)}. Expertise in ETL/ELT, data modeling, and ensuring data quality. Proven ability to deliver reliable infrastructure supporting analytics and ML workflows."
-        else:
-            # General summary
-            if years_exp == "aspiring":
-                summary = f"Aspiring {self.target_role} with hands-on experience in {', '.join(matched_techs)}. Strong technical foundation with proven ability to learn quickly and deliver results."
-            else:
-                summary = f"JD-aligned {self.target_role} with {years_exp} of experience in {', '.join(matched_techs)}. Proven track record of delivering high-quality solutions and collaborating with cross-functional teams."
-        
-        return summary
+        """Deprecated - summary is now generated by LLM master prompt. Return empty string."""
+        logger.warning("ATS Optimizer generate_summary called - this is deprecated. Use LLM master prompt instead.")
+        return ""
     
-    def generate_experience_bullets(self, role: Dict[str, Any]) -> List[str]:
-        """Generate 4 unique JD-aligned bullets for experience role using actual JD keywords and responsibilities."""
-        bullets = []
-        title = role.get("title", "").lower()
-        
-        # Determine role level
-        is_intern = "intern" in title
-        is_junior = "junior" in title or ("analyst" in title and "senior" not in title)
-        is_senior = "senior" in title or "lead" in title
-        
-        # Extract JD-specific technologies and methods
-        jd_tech = [s for lst in self.skills_from_jd.values() for s in lst][:5]
-        jd_tech_str = ", ".join(jd_tech[:2]) if jd_tech else "Python and SQL"
-        
-        # Generate bullets based on domain context and JD content
-        if self.domain_context in ['ml', 'data_science']:
-            # ML/Data Science focused bullets
-            if is_intern:
-                bullets.extend([
-                    f"Built and evaluated ML models using {jd_tech_str}, achieving 85%+ accuracy on validation datasets for business use cases.",
-                    f"Conducted feature engineering and data preprocessing on {self._get_scale_term()} records, improving model performance and reducing overfitting.",
-                    f"Collaborated with data engineers and product teams to define modeling requirements and deploy proof-of-concept models.",
-                    f"Documented model architecture, hyperparameters, and evaluation metrics, enabling reproducibility and knowledge transfer."
-                ])
-            elif is_junior or is_senior:
-                impact_scale = "10+ models" if is_senior else "5+ models"
-                stakeholder_scope = "C-suite and business leaders" if is_senior else "product and analytics teams"
-                bullets.extend([
-                    f"Designed, prototyped, and deployed {impact_scale} for {self._get_domain_use_cases()}, using {jd_tech_str} to drive measurable business impact.",
-                    f"Performed feature engineering, experimentation, and hyperparameter tuning, improving model accuracy by 15-20% and reducing false positives.",
-                    f"Collaborated with {stakeholder_scope} to identify high-impact ML opportunities, prioritize use cases, and translate business problems into technical solutions.",
-                    f"Established MLOps best practices including model monitoring, versioning, and A/B testing, ensuring production reliability and continuous improvement."
-                ])
-            else:
-                bullets.extend([
-                    f"Developed predictive models using {jd_tech_str} to support {self._get_domain_use_cases()}, achieving measurable improvements in business KPIs.",
-                    f"Conducted exploratory data analysis and feature engineering on large datasets, uncovering actionable insights and improving model performance.",
-                    f"Collaborated with engineering and product teams to deploy models to production, ensuring scalability and monitoring.",
-                    f"Documented modeling methodology, results, and recommendations, enabling data-driven decision-making across the organization."
-                ])
-        
-        elif self.domain_context == 'analytics':
-            # Analytics focused bullets
-            if is_intern:
-                bullets.extend([
-                    f"Cleaned and validated datasets using {jd_tech_str}, improving data accuracy by 25% for core reporting dashboards.",
-                    f"Conducted exploratory analyses on {self._get_scale_term()} records to identify operational trends and cost-saving anomalies, sharing weekly insights with stakeholders.",
-                    f"Built {self._get_dashboard_count()} interactive dashboards tracking KPIs across sales, operations, and marketing functions.",
-                    f"Automated data quality checks reducing manual validation time by 30% and improving dashboard refresh reliability."
-                ])
-            else:
-                impact_scale = "15+ dashboards" if is_senior else "8+ dashboards"
-                stakeholder_scope = "executive leadership" if is_senior else "department stakeholders"
-                bullets.extend([
-                    f"Designed and built {impact_scale} using {jd_tech_str}, delivering real-time insights to {stakeholder_scope} and supporting data-driven decisions.",
-                    f"Wrote and optimized {self._get_query_count()} SQL queries and data models, improving query performance by 35% and enabling self-service analytics.",
-                    f"Collaborated with business teams to define metrics, identify trends, and deliver on-time analytics solutions aligned to strategic initiatives.",
-                    f"Established data quality frameworks and automated validation pipelines, reducing reporting errors by 60% and earning stakeholder trust."
-                ])
-        
-        elif self.domain_context == 'data_engineering':
-            # Data Engineering focused bullets
-            if is_intern:
-                bullets.extend([
-                    f"Built data ingestion pipelines using {jd_tech_str}, processing {self._get_scale_term()} records daily with 99%+ uptime.",
-                    f"Implemented data validation and quality checks, reducing data loss incidents and improving downstream analytics reliability.",
-                    f"Collaborated with analytics and ML teams to understand data requirements and optimize pipeline performance.",
-                    f"Documented pipeline architecture and deployment procedures, enabling team reproducibility and maintenance."
-                ])
-            else:
-                scale = "10M+ daily records" if is_senior else "1M+ daily records"
-                bullets.extend([
-                    f"Designed and deployed end-to-end data pipelines using {jd_tech_str}, ingesting and transforming {scale} with 99.5%+ uptime and SLA compliance.",
-                    f"Optimized ETL workflows and data models, reducing pipeline execution time by 45% and cutting infrastructure costs by 20%.",
-                    f"Collaborated with ML and analytics teams to improve data collection, schema design, and modeling signals, enabling high-quality downstream use cases.",
-                    f"Implemented comprehensive monitoring, alerting, and error handling, reducing incidents by 70% and ensuring data reliability."
-                ])
-        
-        else:
-            # General/Backend focused bullets
-            if is_intern:
-                bullets.extend([
-                    f"Developed backend features and APIs using {jd_tech_str}, supporting core product functionality and user workflows.",
-                    f"Wrote unit and integration tests achieving 90%+ coverage, ensuring code quality and reducing production bugs.",
-                    f"Collaborated with frontend and product teams to define requirements, implement features, and deliver on sprint commitments.",
-                    f"Participated in code reviews and pair programming sessions, contributing to team knowledge sharing and best practices."
-                ])
-            else:
-                bullets.extend([
-                    f"Designed and implemented scalable backend services using {jd_tech_str}, supporting {self._get_scale_term()} users with 99.9% uptime.",
-                    f"Optimized API performance and database queries, reducing latency by 40% and improving user experience.",
-                    f"Collaborated with cross-functional teams to architect solutions, define technical roadmaps, and deliver high-impact features.",
-                    f"Mentored junior developers through code reviews, pair programming, and technical guidance, fostering a culture of excellence."
-                ])
-        
-        return bullets[:4]  # Return exactly 4 unique bullets
+    def generate_experience_bullets(self, role: Dict[str, Any], role_index: int = 0) -> List[str]:
+        """Delegate to LLM-generated bullets; no template math."""
+        return []
     
     def _get_domain_use_cases(self) -> str:
         """Get domain-specific use cases from JD."""
@@ -859,115 +734,9 @@ class ATSOptimizer:
         """Get query count."""
         return "50+"
     
-    def generate_project_bullets(self, project: Dict[str, Any]) -> List[str]:
-        """Generate 3 unique, JD-aligned bullets dynamically based on project characteristics and JD requirements."""
-        bullets = []
-        project_name = project.get("name", "Project")
-        project_name_lower = project_name.lower()
-        technologies = project.get("technologies", [])
-        
-        # Identify project domain from technologies
-        has_ml = any(t.lower() in ['tensorflow', 'keras', 'pytorch', 'scikit-learn', 'xgboost', 'lightgbm'] for t in technologies)
-        has_cv = any(t.lower() in ['opencv', 'cv2', 'computer vision'] for t in technologies)
-        has_sql = any(t.lower() in ['sql', 'postgresql', 'mysql', 'sqlite'] for t in technologies)
-        has_bi = any(t.lower() in ['tableau', 'power bi', 'looker', 'superset', 'dax'] for t in technologies)
-        has_java = any(t.lower() in ['java', 'spring', 'spring boot', 'hibernate', 'jpa', 'j2ee'] for t in technologies)
-        has_python = any(t.lower() in ['python', 'fastapi', 'flask', 'django', 'pydantic'] for t in technologies)
-        has_de = any(t.lower() in ['spark', 'airflow', 'kafka', 'etl'] for t in technologies)
-        has_cloud = any(t.lower() in ['aws', 'azure', 'gcp', 'docker', 'kubernetes'] for t in technologies)
-        
-        # Get JD-relevant technologies (intersection of project tech and JD mentions)
-        proj_jd_overlap = [t for t in technologies if re.search(r'\b' + re.escape(t.lower()) + r'\b', self.jd)]
-        primary_tech = ', '.join(proj_jd_overlap[:2]) if proj_jd_overlap else ', '.join(technologies[:2])
-        
-        # Extract project purpose from name keywords
-        is_microservices = any(kw in project_name_lower for kw in ['microservice', 'micro-service', 'distributed'])
-        is_ecommerce = any(kw in project_name_lower for kw in ['ecommerce', 'e-commerce', 'shop', 'store', 'retail'])
-        is_management = any(kw in project_name_lower for kw in ['management', 'admin', 'crm', 'erp'])
-        is_analytics = any(kw in project_name_lower for kw in ['analytics', 'dashboard', 'reporting', 'insights', 'bi'])
-        is_pipeline = any(kw in project_name_lower for kw in ['pipeline', 'etl', 'data processing', 'ingestion'])
-        
-        # Get JD priorities from keywords and domain context
-        jd_mentions_api = any(kw in self.jd for kw in ['api', 'rest', 'restful', 'endpoint'])
-        jd_mentions_scale = any(kw in self.jd for kw in ['scalable', 'scale', 'performance', 'optimize'])
-        jd_mentions_testing = any(kw in self.jd for kw in ['test', 'testing', 'quality'])
-        jd_mentions_architecture = any(kw in self.jd for kw in ['architect', 'design', 'system design'])
-        
-        # Generate bullets based on project type and JD alignment
-        if has_ml or has_cv:
-            # ML/CV Project
-            model_type = "computer vision" if has_cv else "machine learning"
-            ml_libs = [t for t in technologies if t.lower() in ['tensorflow', 'keras', 'pytorch', 'opencv', 'scikit-learn', 'xgboost', 'lightgbm']]
-            bullets.append(f"Developed {model_type} model using {', '.join(ml_libs[:2]) if ml_libs else primary_tech}, achieving 88% accuracy through iterative training, hyperparameter tuning, and cross-validation.")
-            bullets.append(f"Engineered data preprocessing and feature extraction pipeline processing 5000+ samples, improving model performance and generalization across test cases.")
-            bullets.append(f"Implemented model evaluation framework with performance metrics (precision, recall, F1-score), enabling data-driven optimization and deployment readiness.")
-        
-        elif has_bi or is_analytics:
-            # Analytics/BI Project
-            bi_tech = next((t for t in technologies if t.lower() in ['tableau', 'power bi', 'looker', 'superset']), None)
-            bullets.append(f"Designed interactive analytics dashboard using {bi_tech or primary_tech} with 10+ visualizations and KPI tracking, enabling data-driven decision making.")
-            if has_sql:
-                bullets.append(f"Built optimized SQL queries with joins, aggregations, and window functions, supporting real-time data retrieval and metric calculations.")
-            else:
-                bullets.append(f"Implemented data aggregation and transformation logic, processing 100K+ records with sub-second response times.")
-            bullets.append(f"Established automated data refresh workflows and quality validation checks, ensuring accuracy and reliability of insights.")
-        
-        elif is_pipeline or has_de:
-            # Data Pipeline/ETL Project
-            bullets.append(f"Engineered end-to-end data pipeline using {primary_tech}, processing and transforming 1M+ daily records with automated error handling and retry logic.")
-            bullets.append(f"Implemented data validation, quality checks, and monitoring alerts, reducing data inconsistencies by 90% and improving reliability.")
-            bullets.append(f"Optimized pipeline execution through batch processing and parallel operations, reducing runtime by 40% and infrastructure costs.")
-        
-        elif is_microservices and (has_java or has_python):
-            # Microservices Architecture Project
-            framework = next((t for t in technologies if t.lower() in ['spring boot', 'spring', 'fastapi', 'flask']), technologies[0])
-            bullets.append(f"Architected and implemented microservices using {framework}, enabling independent service deployment, scaling, and fault isolation.")
-            if jd_mentions_api or 'api' in self.jd:
-                bullets.append(f"Designed RESTful APIs with standardized request/response formats, authentication, and error handling, supporting high-throughput operations.")
-            else:
-                bullets.append(f"Built service-to-service communication with message queues and event-driven patterns, ensuring loose coupling and resilience.")
-            if is_ecommerce:
-                bullets.append(f"Integrated payment processing, inventory management, and order fulfillment services with comprehensive transaction handling and rollback mechanisms.")
-            else:
-                bullets.append(f"Implemented distributed tracing, centralized logging, and health monitoring, enabling observability across microservices ecosystem.")
-        
-        elif (has_java or has_python) and (is_management or 'management' in project_name_lower):
-            # Management System Project
-            framework = next((t for t in technologies if t.lower() in ['spring boot', 'spring', 'django', 'flask', 'fastapi']), technologies[0])
-            entity_type = "employee" if "employee" in project_name_lower else "resource"
-            bullets.append(f"Built {entity_type} management system using {framework}, implementing CRUD operations, role-based access control, and audit logging.")
-            if 'hibernate' in [t.lower() for t in technologies] or 'jpa' in [t.lower() for t in technologies]:
-                bullets.append(f"Designed normalized database schema with entity relationships and ORM mappings, optimizing query performance and data integrity.")
-            else:
-                bullets.append(f"Designed relational database schema with normalized tables, foreign keys, and indexing for efficient data operations.")
-            if jd_mentions_api:
-                bullets.append(f"Developed RESTful API endpoints with input validation, exception handling, and JSON serialization for seamless frontend integration.")
-            else:
-                bullets.append(f"Implemented business logic layer with transaction management, validation rules, and comprehensive error handling.")
-        
-        elif has_java or has_python:
-            # Generic Backend Project
-            framework = next((t for t in technologies if t.lower() in ['spring boot', 'spring', 'fastapi', 'django', 'flask']), primary_tech)
-            bullets.append(f"Developed backend application using {framework}, implementing layered architecture with separation of concerns and maintainable code structure.")
-            if jd_mentions_api or 'rest' in self.jd or 'api' in self.jd:
-                bullets.append(f"Built RESTful API endpoints with request validation, error handling, and response serialization, ensuring robust service layer.")
-            else:
-                bullets.append(f"Implemented core business logic with modular design, dependency injection, and reusable components.")
-            if jd_mentions_testing:
-                bullets.append(f"Developed comprehensive test suite with unit and integration tests, achieving 90%+ coverage and ensuring code quality.")
-            else:
-                bullets.append(f"Integrated database layer with ORM/query builders, implementing efficient data access patterns and transaction management.")
-        
-        else:
-            # Generic fallback - use project name context
-            bullets.append(f"Developed {project_name} using {primary_tech}, implementing core functionality with clean code architecture and best practices.")
-            if jd_mentions_testing or 'quality' in self.jd:
-                bullets.append(f"Built comprehensive testing framework with unit and integration tests, ensuring 95%+ reliability and edge case coverage.")
-            else:
-                bullets.append(f"Implemented robust error handling, validation, and logging mechanisms, ensuring system stability and debuggability.")
-            bullets.append(f"Documented system architecture, API specifications, and deployment workflows, enabling team collaboration and knowledge transfer.")
-        
-        return bullets[:3]  # Return exactly 3 unique bullets
+    def generate_project_bullets(self, project: Dict[str, Any], project_index: int = 0) -> List[str]:
+        """Delegate to LLM-generated bullets; no template math."""
+        return []
     
     def get_skills_grouped(self, personal_skills: Dict[str, List[str]]) -> Dict[str, List[str]]:
         """Return JD-only skills to keep narrative fully driven by the job description."""
@@ -988,62 +757,13 @@ class ATSOptimizer:
         
         return cert_line
 
-    def get_award_cert_description(self, entry: Dict[str, Any], target_role: str = None) -> str:
-        """Create a unique, JD-aligned description for awards/certifications based on actual JD requirements."""
+    def get_award_cert_description(self, entry: Dict[str, Any], target_role: str = None, entry_index: int = 0) -> str:
+        """Create a JD-aligned certification/award description dynamically without stored templates."""
         if target_role is None:
             target_role = self.target_role
         
-        entry_type = entry.get("type", "").lower()
-        cert_name = entry.get("name", "").lower()
-        
-        # Get top 3 JD skills for this specific JD
-        jd_skills = [s for lst in self.skills_from_jd.values() for s in lst][:3]
-        jd_skills_str = ", ".join(jd_skills) if jd_skills else "role-critical skills"
-        
-        # Domain-specific certification descriptions aligned to current JD
-        if "google data analytics" in cert_name:
-            if self.domain_context in ['ml', 'data_science']:
-                return "Completed data analytics certification covering SQL, Python, visualization, and statistical analysis—foundational for feature engineering and EDA."
-            elif self.domain_context == 'analytics':
-                return "Completed Google's analytics curriculum covering data cleaning, SQL, visualization, dashboards, and stakeholder communication—directly applicable to role requirements."
-            else:
-                return "Earned certification demonstrating proficiency in SQL, data cleaning, visualization, and analytical thinking relevant to the role."
-        
-        if "sql" in cert_name and "hackerrank" in cert_name:
-            if self.domain_context in ['ml', 'data_science']:
-                return "Validated advanced SQL: complex joins, window functions, and optimization—critical for feature engineering and training pipelines."
-            elif self.domain_context == 'data_engineering':
-                return "Demonstrated expert SQL for data modeling, indexing, and performance tuning—core for reliable pipelines and downstream models."
-            else:
-                return "Validated advanced SQL including complex queries and optimization—core for analytics and reporting reliability."
-        
-        if "machine learning" in cert_name or "ml" in cert_name or "ai" in cert_name:
-            return "Completed ML certification covering model development, evaluation, deployment, and MLOps—aligned to predictive modeling responsibilities."
-        
-        if "aws certified developer" in cert_name or ("aws" in cert_name and "developer" in cert_name):
-            return "Validated ability to build and deploy services on AWS with CI/CD, monitoring, and secure API practices—supporting production-grade delivery."
-        if "aws" in cert_name or "cloud" in cert_name:
-            return "Validated cloud expertise for deploying scalable services and data workloads with reliability and security controls."
-        
-        if "oracle" in cert_name and "java" in cert_name:
-            return "Validated Java SE proficiency including core language, OOP, collections, concurrency, and JVM best practices for production services."
-        if "java" in cert_name:
-            return "Demonstrated strong Java development skills across OOP, collections, exception handling, and performance-conscious coding."
-        
-        if "tableau" in cert_name or "power bi" in cert_name:
-            return "Demonstrated proficiency in dashboard design, data visualization, and storytelling—key for communicating insights to stakeholders."
-        
-        if "python" in cert_name:
-            if self.domain_context in ['ml', 'data_science']:
-                return "Completed Python certification covering Pandas, NumPy, and ML libraries—fundamentals for data manipulation and model development."
-            else:
-                return "Validated Python proficiency for scripting, data processing, and automation supporting role responsibilities."
-        
-        # Fallback: generic JD-aligned description
-        if entry_type == "award":
-            return f"Recognized for outstanding achievement aligned to {target_role}, demonstrating impact in {jd_skills_str}."
-        else:
-            return f"Certification validates core competencies in {jd_skills_str} essential for {target_role} responsibilities."
+        # Deprecated: LLM provides certification lines; keep empty fallback
+        return ""
 
 
 __all__ = ["ATSOptimizer"]

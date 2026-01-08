@@ -11,8 +11,15 @@ from datetime import datetime
 
 from graph import app, ResumeState, PersonalInfo
 from utils.logger import logger
-from utils.helpers import format_validation_report, format_feedback_message
-from config.settings import RESUME_OUTPUT_DIR, LATEX_OUTPUT_DIR, OUTPUT_DIR, MAX_ITERATIONS
+from utils.helpers import format_validation_report, format_feedback_message, cleanup_old_outputs
+from config.settings import (
+    RESUME_OUTPUT_DIR,
+    LATEX_OUTPUT_DIR,
+    OUTPUT_DIR,
+    MAX_ITERATIONS,
+    INPUT_JOB_FILE,
+    INPUT_PERSONAL_FILE,
+)
 
 def display_results(final_state) -> None:
     """Display the final results."""
@@ -21,14 +28,31 @@ def display_results(final_state) -> None:
     print("="*80 + "\n")
     
     # Handle both dict and object access patterns
+    overall_status = final_state.get("overall_status", "unknown") if isinstance(final_state, dict) else getattr(final_state, "overall_status", "unknown")
     success = final_state.get("success", False) if isinstance(final_state, dict) else getattr(final_state, "success", False)
+    classified_role = final_state.get("classified_role") if isinstance(final_state, dict) else getattr(final_state, "classified_role", None)
+    role_level = final_state.get("role_level") if isinstance(final_state, dict) else getattr(final_state, "role_level", None)
+    
+    # Check for role rejection (NEW - Step 0)
+    if overall_status.lower() == "rejected":
+        print(">>> ROLE CLASSIFICATION REJECTED <<<\n")
+        role_error = final_state.get("role_classification_error") if isinstance(final_state, dict) else getattr(final_state, "role_classification_error", None)
+        if role_error:
+            print(f"Rejection Reason:\n{role_error}\n")
+        print("The job description could not be classified into one of the supported roles:")
+        print("  - Data Analyst")
+        print("  - Data Scientist")
+        print("  - Data Engineer")
+        print("\nPlease provide a job description for one of these roles.\n")
+        print("="*80)
+        return
     
     if success:
         print(">>> SUCCESS <<<")
         iteration = final_state.get("iteration", 0) if isinstance(final_state, dict) else getattr(final_state, "iteration", 0)
         print(f"Resume built successfully in {iteration + 1} iteration(s)")
-        overall_status = final_state.get("overall_status", "unknown") if isinstance(final_state, dict) else getattr(final_state, "overall_status", "unknown")
-        print(f"\nFinal Status: {overall_status.upper()}")
+        print(f"\nRole Classification: {classified_role} ({role_level})" if role_level else f"\nRole Classification: {classified_role}")
+        print(f"Final Status: {overall_status.upper()}")
         
         ats_report = final_state.get("ats_report") if isinstance(final_state, dict) else getattr(final_state, "ats_report", None)
         if ats_report:
@@ -56,6 +80,9 @@ def display_results(final_state) -> None:
                 json.dump(resume_content, f, indent=2)
             print(f"[*] Resume content saved: {json_file}")
         
+        # Cleanup old outputs - keep only last 3 files of each type
+        cleanup_old_outputs(OUTPUT_DIR, max_files=3)
+        
         print(f"\n[*] All outputs saved to: {OUTPUT_DIR}/")
     else:
         print(">>> UNSUCCESSFUL <<<")
@@ -64,7 +91,6 @@ def display_results(final_state) -> None:
         if iteration >= max_iterations - 1:
             print(f"Max iterations ({max_iterations}) reached")
         
-        overall_status = final_state.get("overall_status", "unknown") if isinstance(final_state, dict) else getattr(final_state, "overall_status", "unknown")
         print(f"\nLast Status: {overall_status}")
         
         feedback = final_state.get("feedback") if isinstance(final_state, dict) else getattr(final_state, "feedback", None)
@@ -80,12 +106,16 @@ def save_execution_report(final_state, elapsed_time: float) -> None:
     report_file = f"{OUTPUT_DIR}/execution_report_{timestamp}.json"
     
     # Handle both dict and object access patterns
+    overall_status = final_state.get("overall_status") if isinstance(final_state, dict) else getattr(final_state, "overall_status", "unknown")
     ats_report = final_state.get("ats_report") if isinstance(final_state, dict) else getattr(final_state, "ats_report", None)
     pdf_report = final_state.get("pdf_report") if isinstance(final_state, dict) else getattr(final_state, "pdf_report", None)
     iteration_history = final_state.get("iteration_history") if isinstance(final_state, dict) else getattr(final_state, "iteration_history", [])
-    overall_status = final_state.get("overall_status") if isinstance(final_state, dict) else getattr(final_state, "overall_status", "unknown")
     success = final_state.get("success") if isinstance(final_state, dict) else getattr(final_state, "success", False)
     iteration = final_state.get("iteration") if isinstance(final_state, dict) else getattr(final_state, "iteration", 0)
+    classified_role = final_state.get("classified_role") if isinstance(final_state, dict) else getattr(final_state, "classified_role", None)
+    role_level = final_state.get("role_level") if isinstance(final_state, dict) else getattr(final_state, "role_level", None)
+    role_confidence = final_state.get("role_confidence") if isinstance(final_state, dict) else getattr(final_state, "role_confidence", 0)
+    role_error = final_state.get("role_classification_error") if isinstance(final_state, dict) else getattr(final_state, "role_classification_error", None)
     
     report = {
         "timestamp": datetime.now().isoformat(),
@@ -93,6 +123,12 @@ def save_execution_report(final_state, elapsed_time: float) -> None:
         "elapsed_time_seconds": elapsed_time,
         "final_status": overall_status,
         "success": success,
+        "role_classification": {
+            "classified_role": classified_role,
+            "role_level": role_level,
+            "confidence": role_confidence,
+            "rejection_reason": role_error
+        },
         "ats_score": ats_report.get("ats_score") if ats_report else None,
         "pdf_quality": pdf_report.get("quality_score") if pdf_report else None,
         "iteration_history": iteration_history,
@@ -100,6 +136,9 @@ def save_execution_report(final_state, elapsed_time: float) -> None:
     
     with open(report_file, 'w') as f:
         json.dump(report, f, indent=2)
+    
+    # Cleanup old outputs - keep only last 3 files of each type
+    cleanup_old_outputs(OUTPUT_DIR, max_files=3)
     
     print(f"\n[OK] Execution report saved: {report_file}")
 
@@ -164,7 +203,7 @@ def run_resume_builder(
         raise
 
 
-def load_personal_info(filepath: str = "personal_info.json") -> Optional[Dict[str, Any]]:
+def load_personal_info(filepath: str = INPUT_PERSONAL_FILE) -> Optional[Dict[str, Any]]:
     """Load pre-stored personal info from JSON file."""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
@@ -179,7 +218,7 @@ def load_personal_info(filepath: str = "personal_info.json") -> Optional[Dict[st
 
 def main():
     """
-    Main entry point. Loads job description from input_data.json and runs workflow.
+    Main entry point. Loads job description from input/input_data.txt and runs workflow.
     All output is written to the outputs folder; nothing is printed to terminal.
     """
     from config.settings import GROQ_API_KEY, GROQ_MOCK_MODE, OUTPUT_DIR
@@ -189,26 +228,25 @@ def main():
         logger.error("GROQ_API_KEY not set in environment (required in live mode)")
         sys.exit(1)
 
-    # Load job description from input_data.json (default location)
-    job_json_path = Path('input_data.json')
-    if not job_json_path.exists():
-        logger.error(f"job description file not found: {job_json_path}")
+    # Load job description from input/input_data.txt (default location)
+    job_txt_path = Path(INPUT_JOB_FILE)
+    if not job_txt_path.exists():
+        logger.error(f"job description file not found: {job_txt_path}")
         sys.exit(1)
 
     try:
-        with open(job_json_path, 'r', encoding='utf-8') as f:
-            job_data = json.load(f)
+        with open(job_txt_path, 'r', encoding='utf-8') as f:
+            job_description = f.read().strip()
     except Exception as e:
-        logger.error(f"Failed to read job JSON: {e}")
+        logger.error(f"Failed to read job description: {e}")
         sys.exit(1)
 
-    job_description = job_data.get('job_description', '')
-    if not isinstance(job_description, str) or not job_description.strip():
-        logger.error("job JSON must contain a non-empty 'job_description' string")
+    if not job_description:
+        logger.error("job description file is empty")
         sys.exit(1)
 
     # Load personal info (must exist)
-    personal_info = load_personal_info('personal_info.json')
+    personal_info = load_personal_info(INPUT_PERSONAL_FILE)
     if personal_info is None:
         logger.error("personal_info.json not found or invalid; personal info is required in job mode")
         sys.exit(1)
@@ -242,6 +280,9 @@ def main():
             json_path = Path(RESUME_OUTPUT_DIR) / f"resume_{timestamp}.json"
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(resume_content, f, indent=2)
+
+        # Cleanup old outputs - keep only last 3 files of each type
+        cleanup_old_outputs(OUTPUT_DIR, max_files=3)
 
         # Log to files only (no stdout)
         logger.info(f"Final LaTeX saved to: {latex_path}")
