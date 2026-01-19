@@ -22,7 +22,13 @@ from config.settings import (
 )
 
 def display_results(final_state) -> None:
-    """Display the final results."""
+    """Display the final results.
+    
+    FIX-2: ALWAYS save outputs, regardless of success/fail status
+    - LaTeX generated and saved even on FAIL
+    - JSON resume saved even on FAIL
+    - Execution report always generated
+    """
     print("\n" + "="*80)
     print("RESUME BUILDING COMPLETE")
     print("="*80 + "\n")
@@ -32,6 +38,8 @@ def display_results(final_state) -> None:
     success = final_state.get("success", False) if isinstance(final_state, dict) else getattr(final_state, "success", False)
     classified_role = final_state.get("classified_role") if isinstance(final_state, dict) else getattr(final_state, "classified_role", None)
     role_level = final_state.get("role_level") if isinstance(final_state, dict) else getattr(final_state, "role_level", None)
+    finalization_state = final_state.get("finalization_state") if isinstance(final_state, dict) else getattr(final_state, "finalization_state", None)
+    warnings = final_state.get("warnings", []) if isinstance(final_state, dict) else getattr(final_state, "warnings", [])
     
     # Check for role rejection (NEW - Step 0)
     if overall_status.lower() == "rejected":
@@ -47,56 +55,59 @@ def display_results(final_state) -> None:
         print("="*80)
         return
     
+    # FIX-2: Display status clearly (PASS vs FAIL with WARNINGS)
     if success:
         print(">>> SUCCESS <<<")
-        iteration = final_state.get("iteration", 0) if isinstance(final_state, dict) else getattr(final_state, "iteration", 0)
-        print(f"Resume built successfully in {iteration + 1} iteration(s)")
-        print(f"\nRole Classification: {classified_role} ({role_level})" if role_level else f"\nRole Classification: {classified_role}")
-        print(f"Final Status: {overall_status.upper()}")
-        
-        ats_report = final_state.get("ats_report") if isinstance(final_state, dict) else getattr(final_state, "ats_report", None)
-        if ats_report:
-            print(f"\nATS Score: {ats_report.get('ats_score', 0):.1f}%")
-            print(f"Keywords Matched: {len(ats_report.get('keywords_present', []))}")
-        
-        pdf_report = final_state.get("pdf_report") if isinstance(final_state, dict) else getattr(final_state, "pdf_report", None)
-        if pdf_report:
-            print(f"PDF Quality: {pdf_report.get('quality_score', 0):.0f}/100")
-        
-        # Save outputs
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        final_latex = final_state.get("final_latex") if isinstance(final_state, dict) else getattr(final_state, "final_latex", None)
-        if final_latex:
-            latex_file = f"{LATEX_OUTPUT_DIR}/resume_{timestamp}.tex"
-            with open(latex_file, 'w') as f:
-                f.write(final_latex)
-            print(f"\n[*] LaTeX saved: {latex_file}")
-        
-        resume_content = final_state.get("resume_content") if isinstance(final_state, dict) else getattr(final_state, "resume_content", None)
-        if resume_content:
-            json_file = f"{RESUME_OUTPUT_DIR}/resume_{timestamp}.json"
-            with open(json_file, 'w') as f:
-                json.dump(resume_content, f, indent=2)
-            print(f"[*] Resume content saved: {json_file}")
-        
-        # Cleanup old outputs - keep only last 3 files of each type
-        cleanup_old_outputs(OUTPUT_DIR, max_files=3)
-        
-        print(f"\n[*] All outputs saved to: {OUTPUT_DIR}/")
+        print(f"Status: FINALIZED_PASS")
     else:
-        print(">>> UNSUCCESSFUL <<<")
-        max_iterations = final_state.get("max_iterations", 5) if isinstance(final_state, dict) else getattr(final_state, "max_iterations", 5)
-        iteration = final_state.get("iteration", 0) if isinstance(final_state, dict) else getattr(final_state, "iteration", 0)
-        if iteration >= max_iterations - 1:
-            print(f"Max iterations ({max_iterations}) reached")
-        
-        print(f"\nLast Status: {overall_status}")
-        
-        feedback = final_state.get("feedback") if isinstance(final_state, dict) else getattr(final_state, "feedback", None)
-        if feedback:
-            print("\nLast Feedback:")
-            print(format_feedback_message(feedback))
+        print(">>> COMPLETED WITH WARNINGS <<<")
+        print(f"Status: {finalization_state or 'FINALIZED_FAIL_WITH_WARNINGS'}")
+        if warnings:
+            print("\nWarnings:")
+            for warning in warnings:
+                print(f"  - {warning}")
+    
+    iteration = final_state.get("iteration", 0) if isinstance(final_state, dict) else getattr(final_state, "iteration", 0)
+    print(f"Resume built in {iteration + 1} iteration(s)")
+    print(f"Role Classification: {classified_role} ({role_level})" if role_level else f"Role Classification: {classified_role}")
+    print(f"Final Status: {overall_status.upper()}")
+    
+    ats_report = final_state.get("ats_report") if isinstance(final_state, dict) else getattr(final_state, "ats_report", None)
+    if ats_report:
+        print(f"\nATS Score: {ats_report.get('ats_score', 0):.1f}%")
+        print(f"Keywords Matched: {len(ats_report.get('keywords_present', []))}")
+    
+    pdf_report = final_state.get("pdf_report") if isinstance(final_state, dict) else getattr(final_state, "pdf_report", None)
+    if pdf_report:
+        print(f"PDF Quality: {pdf_report.get('quality_score', 0):.0f}/100")
+    
+    # FIX-2: ALWAYS save outputs regardless of success/fail status
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    final_latex = final_state.get("final_latex") if isinstance(final_state, dict) else getattr(final_state, "final_latex", None)
+    if final_latex:
+        latex_file = f"{LATEX_OUTPUT_DIR}/resume_{timestamp}.tex"
+        with open(latex_file, 'w') as f:
+            f.write(final_latex)
+        print(f"\n[*] LaTeX saved: {latex_file}")
+    
+    resume_content = final_state.get("resume_content") if isinstance(final_state, dict) else getattr(final_state, "resume_content", None)
+    if resume_content:
+        json_file = f"{RESUME_OUTPUT_DIR}/resume_{timestamp}.json"
+        with open(json_file, 'w') as f:
+            json.dump(resume_content, f, indent=2)
+        print(f"[*] Resume content saved: {json_file}")
+    
+    # Cleanup old outputs - keep only last 3 files of each type
+    cleanup_old_outputs(OUTPUT_DIR, max_files=3)
+    
+    print(f"\n[*] All outputs saved to: {OUTPUT_DIR}/")
+    
+    # FIX-2: Show feedback if available (even on FAIL with WARNINGS)
+    feedback = final_state.get("feedback") if isinstance(final_state, dict) else getattr(final_state, "feedback", None)
+    if feedback and not success:
+        print("\nFeedback for Review:")
+        print(format_feedback_message(feedback))
     
     print("\n" + "="*80)
 

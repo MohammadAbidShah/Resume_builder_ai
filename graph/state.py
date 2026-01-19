@@ -30,7 +30,23 @@ class ResumeState(BaseModel):
     
     # Process tracking
     iteration: int = Field(default=0)
-    max_iterations: int = Field(default=5)
+    max_iterations: int = Field(default=2)  # HARD CAP: Maximum 2 iterations
+    generation_mode: str = Field(default="full")  # "full" (iteration 0 only) or "selective" (iteration 1+)
+    
+    # Validation pass flags
+    ats_passed: bool = Field(default=False)
+    pdf_passed: bool = Field(default=False)
+    
+    # FIX-4: Feedback mode (read_only after iteration cap)
+    feedback_mode: str = Field(default="regenerate")  # "regenerate" or "read_only"
+    
+    # FIX-5: Track blocking vs non-blocking standards
+    blocking_standards_met: bool = Field(default=False)  # Only blocking standards
+    warnings: List[str] = Field(default_factory=list)  # Non-blocking warnings
+    
+    # FIX-7: Deterministic exit state
+    finalization_state: Optional[str] = Field(default=None)  # FINALIZED_PASS or FINALIZED_FAIL_WITH_WARNINGS
+    should_finalize: bool = Field(default=False)  # FIX-1: Hard signal to finalize
     
     # Content generation
     resume_content: Optional[Dict[str, Any]] = Field(default=None)

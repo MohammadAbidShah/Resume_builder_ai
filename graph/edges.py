@@ -8,43 +8,50 @@ def should_continue_iteration(state: ResumeState) -> Literal["continue", "finali
     """
     Determine if we should iterate again or finalize.
     
-    Conditions for PASS (finalize):
-    1. All quality standards met
-    
-    Conditions for CONTINUE (iterate):
-    1. Status is FAIL
-    2. Iteration count < MAX_ITERATIONS
-    3. No errors occurred
-    
-    Conditions for FINALIZE (regardless of status):
-    1. Hit maximum iterations
-    2. Unrecoverable error occurred
+    FIX-1: Increment iteration FIRST, then enforce MAX_ITERATIONS = 2
+    FIX-6: Never loop on feedback failure
+    FIX-7: Always end in deterministic state
     """
     
-    # Check for errors
+    # FIX-1: Increment iteration counter FIRST
+    state.iteration += 1
+    logger.info(f"Incremented to iteration {state.iteration}")
+    
+    # FIX-1: Check hard iteration cap IMMEDIATELY after increment
+    if state.iteration >= state.max_iterations:
+        logger.warning(f"HARD ITERATION CAP REACHED: {state.iteration} >= {state.max_iterations}")
+        # FIX-4: Enter read-only feedback mode
+        state.feedback_mode = "read_only"
+        # FIX-7: Mark for deterministic exit
+        state.should_finalize = True
+        if not state.finalization_state:
+            state.finalization_state = "FINALIZED_FAIL_WITH_WARNINGS"
+        return "finalize"
+    
+    # Check for blocking errors
     if state.content_generation_error or state.latex_generation_error:
         logger.warning("Error encountered - finalizing")
+        state.should_finalize = True
+        state.finalization_state = "FINALIZED_FAIL_WITH_WARNINGS"
         return "finalize"
 
-    # In mock mode, avoid long-running iteration loops by finalizing after
-    # the first iteration to keep offline testing bounded and deterministic.
+    # In mock mode, avoid long-running iteration loops
     if GROQ_MOCK_MODE and state.iteration >= 1:
-        logger.info("Mock mode: finalizing after one iteration to avoid loop")
+        logger.info("Mock mode: finalizing after one iteration")
+        state.should_finalize = True
+        if not state.finalization_state:
+            state.finalization_state = "FINALIZED_FAIL_WITH_WARNINGS"
         return "finalize"
     
-    # Check status
-    if state.overall_status == "pass":
-        logger.info("[OK] ALL STANDARDS MET - FINALIZING")
+    # FIX-5: Check BLOCKING standards only (not warnings)
+    if state.blocking_standards_met:
+        logger.info("[OK] ALL BLOCKING STANDARDS MET - FINALIZING")
+        state.finalization_state = "FINALIZED_PASS"
+        state.should_finalize = True
         return "finalize"
     
-    # Check iteration limit BEFORE incrementing
-    if state.iteration >= state.max_iterations - 1:
-        logger.warning(f"Max iterations ({state.max_iterations}) reached - finalizing")
-        return "finalize"
-    
-    # Increment iteration counter for next iteration
-    state.iteration += 1
-    logger.info(f"Standards not met - continuing to iteration {state.iteration + 1}")
+    # FIX-6: Feedback failures don't cause loops - just continue to next iteration
+    logger.info(f"Standards not met - continuing to iteration {state.iteration}")
     return "continue"
 
 def route_to_next_iteration(state: ResumeState) -> Literal["generate_content", "__end__"]:

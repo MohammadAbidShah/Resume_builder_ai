@@ -214,7 +214,9 @@ Before returning, verify:
         self,
         job_description: str,
         personal_info: Dict[str, Any],
-        feedback: str = None
+        feedback: str = None,
+        sections_to_regenerate: list = None,
+        cached_content: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
         Generate FAANG-optimized resume content.
@@ -223,11 +225,18 @@ Before returning, verify:
             job_description: Raw job description text
             personal_info: User's personal information (skills, experience, education)
             feedback: Optional feedback from previous iteration
+            sections_to_regenerate: FIX-3 - List of sections to regenerate (for selective mode)
+            cached_content: FIX-3 - Previously generated content to reuse for non-failed sections
             
         Returns:
             Structured resume content with quality metadata
         """
         logger.info("=== Content Generator Agent: Starting ===")
+        
+        # FIX-3: Handle selective regeneration mode
+        if sections_to_regenerate:
+            logger.info(f"Selective regeneration mode: regenerating sections {sections_to_regenerate}\")")
+            # For now, regenerate all sections. In future, can optimize to regenerate only specified sections
         
         # Parse job description with enhanced extraction
         job_context = self._extract_job_requirements(job_description)

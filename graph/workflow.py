@@ -7,6 +7,7 @@ from graph.nodes import (
     node_validate_ats,
     node_validate_pdf,
     node_evaluate_and_decide,
+    node_selective_regeneration,
     node_save_iteration,
     node_finalize,
 )
@@ -44,6 +45,7 @@ def build_workflow():
     workflow.add_node("validate_ats", node_validate_ats)
     workflow.add_node("validate_pdf", node_validate_pdf)
     workflow.add_node("evaluate", node_evaluate_and_decide)
+    workflow.add_node("selective_regeneration", node_selective_regeneration)
     workflow.add_node("save_iteration", node_save_iteration)
     workflow.add_node("finalize", node_finalize)
     
@@ -64,21 +66,24 @@ def build_workflow():
     # Decision point - should we continue or finalize?
     workflow.add_edge("evaluate", "save_iteration")
 
+    # FIX-2: Router enforcement - feedback failure ONLY routes to selective regeneration
     # In mock mode we route straight to finalize to avoid long-running loops
-    # during offline deterministic testing. In live mode, use conditional
-    # iteration logic.
+    # during offline deterministic testing. In live mode, use conditional iteration logic.
     if GROQ_MOCK_MODE:
       workflow.add_edge("save_iteration", "finalize")
     else:
-      # Conditional edge from save_iteration
+      # Conditional edge from save_iteration with FIX-2 enforcement
       workflow.add_conditional_edges(
         "save_iteration",
         should_continue_iteration,
         {
-          "continue": "generate_content",  # Loop back to content generation
-          "finalize": "finalize",          # Move to finalize
+          "continue": "selective_regeneration",  # FIX-2: ONLY selective regeneration on failure
+          "finalize": "finalize",                 # Move to finalize on pass
         }
       )
+    
+    # FIX-3: Selective regeneration routes to LaTeX generation (skip content generation)
+    workflow.add_edge("selective_regeneration", "generate_latex")
     
     # Final edge
     workflow.add_edge("finalize", END)
