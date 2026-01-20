@@ -8,11 +8,12 @@ This project implements a production-ready **Agentic AI Workflow** using **LangG
 
 1. **Classifies** the target role from job descriptions with confidence scoring
 2. **Generates** FAANG-optimized resume content with XYZ/STAR methodology
-3. **Creates** professional, ATS-friendly LaTeX resumes
-4. **Validates** ATS compatibility with real-time scoring (≥90% threshold)
-5. **Assesses** PDF quality and visual excellence (≥85/100 threshold)
-6. **Iterates** automatically with feedback loops until all standards are met
-7. **Enforces** strict role constraints (Data Analyst/Scientist/Engineer only)
+3. **Validates** and constrains content for optimal word counts and completeness
+4. **Creates** professional, ATS-friendly LaTeX resumes
+5. **Validates** ATS compatibility with real-time scoring (≥90% threshold)
+6. **Assesses** PDF quality and visual excellence (≥85/100 threshold)
+7. **Iterates** automatically with feedback loops until all standards are met
+8. **Enforces** strict role constraints (Data Analyst/Scientist/Engineer only)
 
 ### Key Features
 
@@ -26,7 +27,7 @@ This project implements a production-ready **Agentic AI Workflow** using **LangG
 
 ## 🏗️ Architecture
 
-### Six Specialized Agents + Workflow Orchestration
+### Seven Specialized Agents + Workflow Orchestration
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -49,15 +50,22 @@ This project implements a production-ready **Agentic AI Workflow** using **LangG
 │    • Writes certification descriptions                                    │
 │    • Validates action verbs, quantification rate, keyword density         │
 │    ↓                                                                       │
-│  [AGENT 2] LaTeX Generator                                                │
-│    • Converts content to LaTeX using template                             │
+│  [AGENT 2] Content Validator (llama-3.3-70b-versatile)                   │
+│    • Enforces word-count constraints (Summary: 40-50, Exp: 18-20, etc.)  │
+│    • Preserves complete, meaningful sentences                             │
+│    • Maintains professional tone and impact                               │
+│    • Ensures LaTeX-ready, clean content                                   │
+│    • No information invention - only compression                          │
+│    ↓                                                                       │
+│  [AGENT 3] LaTeX Generator                                                │
+│    • Converts validated content to LaTeX using template                   │
 │    • Applies ATS-friendly formatting                                      │
 │    • Integrates JD-aligned skill grouping                                 │
 │    • Validates syntax (0 errors required)                                 │
 │    ↓                                                                       │
 │  ┌───────────────────────┬────────────────────────┐                      │
 │  ↓                       ↓                         ↓                      │
-│  [AGENT 3]           [AGENT 4]              [Parallel Validation]         │
+│  [AGENT 4]           [AGENT 5]              [Parallel Validation]         │
 │  ATS Checker         PDF Validator          (llama-3.1-8b-instant)       │
 │  • Score: 0-100      • Quality: 0-100                                     │
 │  • Keywords present  • LaTeX validity                                     │
@@ -66,7 +74,7 @@ This project implements a production-ready **Agentic AI Workflow** using **LangG
 │  ↓                       ↓                                                 │
 │  └───────────────────────┴──────────────────┘                            │
 │                          ↓                                                 │
-│  [AGENT 5] Feedback & Decision (llama-3.1-8b-instant)                    │
+│  [AGENT 6] Feedback & Decision (llama-3.1-8b-instant)                    │
 │    • Evaluate 5 standards:                                                │
 │      1. ATS Score ≥ 90%                                                   │
 │      2. Keywords Complete                                                 │
@@ -123,10 +131,11 @@ ResumeBuilderAI/
 │
 ├── agents/
 │   ├── content_generator.py     # Agent 1: FAANG-optimized content (70B model)
-│   ├── latex_generator.py       # Agent 2: LaTeX creation
-│   ├── ats_checker.py           # Agent 3: ATS validation (8B model)
-│   ├── pdf_validator.py         # Agent 4: Quality assessment (8B model)
-│   ├── feedback_agent.py        # Agent 5: Decision making (8B model)
+│   ├── content_validator.py     # Agent 2: Word-count validation (70B model)
+│   ├── latex_generator.py       # Agent 3: LaTeX creation
+│   ├── ats_checker.py           # Agent 4: ATS validation (8B model)
+│   ├── pdf_validator.py         # Agent 5: Quality assessment (8B model)
+│   ├── feedback_agent.py        # Agent 6: Decision making (8B model)
 │   └── __init__.py
 │
 ├── tools/
@@ -299,29 +308,39 @@ Each iteration follows this strict sequence:
    ├─ Generate project bullets
    └─ Write certification descriptions
 
-2. LATEX CREATION (Agent 2)
+2. CONTENT VALIDATION (Agent 2)
+   ├─ Enforce word-count constraints
+   │  • Summary: 40-50 words
+   │  • Experience bullets: 18-20 words each
+   │  • Project bullets: 16-18 words each
+   │  • Certifications: 13-15 words each
+   ├─ Preserve complete, meaningful sentences
+   ├─ Maintain professional tone
+   └─ Ensure LaTeX-ready output
+
+3. LATEX CREATION (Agent 3)
    ├─ Apply template
    ├─ Group skills by JD alignment
    ├─ Format for ATS compliance
    └─ Validate syntax
 
-3. PARALLEL VALIDATION
-   ├─ ATS CHECK (Agent 3)
+4. PARALLEL VALIDATION
+   ├─ ATS CHECK (Agent 4)
    │  ├─ Calculate score (0-100)
    │  ├─ Check keyword coverage
    │  └─ Detect blocking issues
    │
-   └─ PDF VALIDATION (Agent 4)
+   └─ PDF VALIDATION (Agent 5)
       ├─ Validate LaTeX syntax
       ├─ Check structure
       └─ Score quality (0-100)
 
-4. DECISION (Agent 5)
+5. DECISION (Agent 6)
    ├─ Evaluate 5 standards
    ├─ Check hybrid policy
    └─ Decide: PASS or CONTINUE
 
-5. FINALIZATION (if PASS)
+6. FINALIZATION (if PASS)
    ├─ Save LaTeX
    ├─ Save JSON resume
    ├─ Save execution report
@@ -330,7 +349,7 @@ Each iteration follows this strict sequence:
 
    OR
 
-5. ITERATION (if FAIL and < MAX_ITERATIONS)
+6. ITERATION (if FAIL and < MAX_ITERATIONS)
    ├─ Generate detailed feedback
    ├─ Save iteration snapshot
    └─ Loop back to step 1
@@ -436,6 +455,7 @@ FEEDBACK_TEMPERATURE = 0.5            # Medium for decision-making
 | Agent                 | Model                   | Tokens     | Reason                                          |
 | --------------------- | ----------------------- | ---------- | ----------------------------------------------- |
 | **Content Generator** | llama-3.3-70b-versatile | ~2000-4000 | Complex reasoning, FAANG-level content creation |
+| **Content Validator** | llama-3.3-70b-versatile | ~1000-2000 | Intelligent compression, sentence preservation  |
 | **ATS Checker**       | llama-3.1-8b-instant    | ~500-1000  | Simple validation, keyword matching             |
 | **PDF Validator**     | llama-3.1-8b-instant    | ~500-1000  | Structural checks, syntax validation            |
 | **Feedback Agent**    | llama-3.1-8b-instant    | ~500-800   | Binary decision, simple feedback                |
@@ -724,10 +744,30 @@ This prevents disk bloat while maintaining recent history for comparison.
   - `rank_keywords_by_importance()`: Prioritize JD terms
 - **Output**: Structured JSON resume with quality metadata
 
-### Agent 2: LaTeX Generator
+### Agent 2: Content Validator
+
+- **Model**: `llama-3.3-70b-versatile` (70B for intelligent compression)
+- **Role**: Enforce word-count constraints while preserving meaning
+- **Features**:
+  - **Word-Count Constraints** (with ±2 tolerance):
+    - Professional Summary: 40-50 words
+    - Experience Bullets: 18-20 words each
+    - Project Bullets: 16-18 words each
+    - Certifications: 13-15 words each
+  - **Sentence-Aware Truncation**: Preserves complete sentences at boundaries
+  - **Quality Preservation**: Maintains impact, metrics, technical terms
+  - **Zero Padding**: Never adds nonsense to meet minimums
+  - **Fragment Detection**: Warns on incomplete sentences
+- **Strategy**:
+  - LLM-driven compression with explicit prompts emphasizing completeness
+  - Fallback to deterministic truncation if needed
+  - Tolerance-based enforcement prioritizes quality over exact counts
+- **Output**: Clean, LaTeX-ready content with guaranteed complete sentences
+
+### Agent 3: LaTeX Generator
 
 - **Model**: No LLM (template-based rendering)
-- **Role**: Convert JSON to ATS-friendly LaTeX
+- **Role**: Convert validated JSON to ATS-friendly LaTeX
 - **Features**:
   - Template-driven rendering (`input/templates/resume_template.tex`)
   - JD-aligned skill grouping
@@ -739,7 +779,7 @@ This prevents disk bloat while maintaining recent history for comparison.
   - `validate_latex_syntax()`: Check compilation errors
 - **Output**: Compilable LaTeX code (~5000-8000 chars)
 
-### Agent 3: ATS Checker
+### Agent 4: ATS Checker
 
 - **Model**: `llama-3.1-8b-instant` (8B for efficient validation)
 - **Role**: Validate ATS compatibility
@@ -754,7 +794,7 @@ This prevents disk bloat while maintaining recent history for comparison.
   - `extract_plain_text_from_latex()`: Parse LaTeX
 - **Output**: `{"ats_score": 92.5, "keywords_present": [...], "keywords_missing": [...]}`
 
-### Agent 4: PDF Validator
+### Agent 5: PDF Validator
 
 - **Model**: `llama-3.1-8b-instant` (8B for structural checks)
 - **Role**: Assess PDF quality and LaTeX validity
@@ -768,7 +808,7 @@ This prevents disk bloat while maintaining recent history for comparison.
   - `validate_pdf_quality()`: Structure scoring
 - **Output**: `{"quality_score": 97, "latex_valid": true, "recommendation": "PASS"}`
 
-### Agent 5: Feedback & Decision Agent
+### Agent 6: Feedback & Decision Agent
 
 - **Model**: `llama-3.1-8b-instant` (8B for binary decisions)
 - **Role**: Evaluate standards and decide PASS/FAIL
@@ -812,7 +852,9 @@ All logs are saved to `logs/resume_builder_YYYYMMDD_HHMMSS.log`
 2026-01-08 10:30:48 - ResumeBuilder - INFO -   - Quantification rate: 80.0%
 2026-01-08 10:30:48 - ResumeBuilder - INFO -   - Action verb compliance: 0.0%
 2026-01-08 10:30:48 - ResumeBuilder - INFO -   - Keyword coverage: 0.0%
-2026-01-08 10:30:48 - ResumeBuilder - INFO - Generating LaTeX code...
+2026-01-08 10:30:48 - ResumeBuilder - INFO - Validating resume content length and precision...
+2026-01-08 10:30:49 - ResumeBuilder - INFO - [OK] Content validated and constrained for word counts
+2026-01-08 10:30:49 - ResumeBuilder - INFO - Generating LaTeX code...
 2026-01-08 10:30:48 - ResumeBuilder - INFO - LaTeX Generator: Rendered LaTeX from local template
 2026-01-08 10:30:48 - ResumeBuilder - INFO - LaTeX validation: PASS (0 errors)
 2026-01-08 10:30:48 - ResumeBuilder - INFO - [OK] LaTeX code generated successfully

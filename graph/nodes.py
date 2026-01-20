@@ -3,6 +3,7 @@ from typing import Dict, Any
 from graph.state import ResumeState
 from agents import (
     ResumeContentGeneratorAgent,
+    ContentValidatorAgent,
     LaTeXGeneratorAgent,
     ATSCheckerAgent,
     PDFValidatorAgent,
@@ -14,6 +15,7 @@ from config.settings import MIN_ATS_SCORE, PDF_QUALITY_THRESHOLD, ENABLE_HYBRID_
 
 # Initialize agents
 content_generator = ResumeContentGeneratorAgent()
+content_validator = ContentValidatorAgent()
 latex_generator = LaTeXGeneratorAgent()
 ats_checker = ATSCheckerAgent()
 pdf_validator = PDFValidatorAgent()
@@ -58,6 +60,24 @@ def node_generate_content(state: ResumeState) -> Dict[str, Any]:
     
     logger.info("[OK] Resume content generated successfully")
     return {"resume_content": resume_content}
+
+
+def node_validate_content(state: ResumeState) -> Dict[str, Any]:
+    """Node 1b: Validate and constrain resume content lengths (Agent 2)."""
+    logger.info("Validating resume content length and precision...")
+
+    if not state.resume_content:
+        logger.error("No resume content found for validation")
+        return {"content_generation_error": "Missing resume content for validation"}
+
+    result = content_validator.validate(state.resume_content)
+    if not result.get("success", False):
+        logger.error(f"Content validation failed: {result.get('error')}")
+        return {"content_generation_error": result.get("error", "Content validation failed")}
+
+    validated_content = result.get("validated_content", state.resume_content)
+    logger.info("[OK] Content validated and constrained for word counts")
+    return {"resume_content": validated_content}
 
 def node_generate_latex(state: ResumeState) -> Dict[str, Any]:
     """Node 2: Generate LaTeX code."""
@@ -334,6 +354,7 @@ def node_finalize(state: ResumeState) -> Dict[str, Any]:
 
 __all__ = [
     "node_generate_content",
+    "node_validate_content",
     "node_generate_latex",
     "node_validate_ats",
     "node_validate_pdf",

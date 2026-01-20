@@ -1,4 +1,4 @@
-"""LaTeX Generator Agent - Agent 2."""
+"""LaTeX Generator Agent - Agent 3."""
 import json
 from typing import Dict, Any
 from tools.groq_client import groq_generate
@@ -21,7 +21,7 @@ from utils.validators import validate_json_output
 
 class LaTeXGeneratorAgent:
     """
-    Agent 2: Converts resume content into LaTeX code.
+    Agent 3: Converts resume content into LaTeX code.
     """
     
     def __init__(self):
