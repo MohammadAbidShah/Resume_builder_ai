@@ -18,10 +18,10 @@ from utils.validators import validate_json_output
 class ContentValidatorAgent:
     """Agent 2: Enforce length precision and polish content without adding facts."""
 
-    SUMMARY_RANGE = (40, 50)
-    EXPERIENCE_RANGE = (18, 20)
-    PROJECT_RANGE = (16, 18)
-    CERT_RANGE = (13, 15)
+    SUMMARY_RANGE = (50, 60)
+    EXPERIENCE_RANGE = (20, 22)
+    PROJECT_RANGE = (18, 20)
+    CERT_RANGE = (16, 18)
 
     def __init__(self) -> None:
         self.system_prompt = self._build_system_prompt()
@@ -124,10 +124,10 @@ class ContentValidatorAgent:
 
         constraints = (
             "WORD-COUNT TARGET RANGES (must be COMPLETE sentences):\n"
-            "- Professional Summary: 40-50 words (2-3 complete sentences)\n"
-            "- Experience bullets: 18-20 words each (ONE complete sentence per bullet)\n"
-            "- Project bullets: 16-18 words each (ONE complete sentence per bullet)\n"
-            "- Certification descriptions: 13-15 words each (ONE complete sentence)\n"
+            "- Professional Summary: 50-60 words (2-3 complete sentences)\n"
+            "- Experience bullets: 20-22 words each (ONE complete sentence per bullet)\n"
+            "- Project bullets: 18-20 words each (ONE complete sentence per bullet)\n"
+            "- Certification descriptions: 16-18 words each (ONE complete sentence)\n"
             "\n"
             "HOW TO COMPRESS TEXT:\n"
             "✓ Remove filler: 'was responsible for' → 'Led'\n"
@@ -138,8 +138,8 @@ class ContentValidatorAgent:
             "✗ NEVER create fragments like 'Built system using Python and'\n"
             "✗ NEVER pad with filler words to meet minimum\n"
             "\n"
-            "If a bullet is 17 words (target 18-20), keep it as-is. Quality > exact count.\n"
-            "If a bullet is 23 words (target 18-20), compress by removing weak words.\n"
+            "If a bullet is 19 words (target 20-22), keep it as-is. Quality > exact count.\n"
+            "If a bullet is 25 words (target 20-22), compress by removing weak words.\n"
             "\n"
             "PRESERVE:\n"
             "- All metrics, percentages, and numbers\n"

@@ -21,16 +21,19 @@ class ResumeContentGeneratorAgent:
     - Post-generation quality checks
     """
     
-    # FAANG-approved action verbs by category
+    # FAANG-approved action verbs by category (EXPANDED for better deduplication)
     STRONG_VERBS = {
-        "achievement": ["Spearheaded", "Pioneered", "Architected", "Engineered", "Championed"],
-        "improvement": ["Optimized", "Enhanced", "Accelerated", "Streamlined", "Refined", "Revolutionized"],
-        "leadership": ["Led", "Directed", "Managed", "Coordinated", "Mentored", "Orchestrated"],
-        "creation": ["Designed", "Developed", "Built", "Implemented", "Established", "Created"],
-        "analysis": ["Analyzed", "Evaluated", "Investigated", "Diagnosed", "Assessed", "Researched"],
-        "scale": ["Scaled", "Expanded", "Grew", "Increased", "Multiplied", "Amplified"],
-        "technical": ["Deployed", "Automated", "Integrated", "Migrated", "Configured", "Refactored"]
+        "achievement": ["Architected", "Engineered", "Spearheaded", "Pioneered", "Championed", "Delivered", "Launched"],
+        "improvement": ["Optimized", "Enhanced", "Accelerated", "Streamlined", "Refined", "Revolutionized", "Transformed", "Elevated"],
+        "leadership": ["Led", "Directed", "Managed", "Coordinated", "Mentored", "Orchestrated", "Guided", "Supervised"],
+        "creation": ["Designed", "Developed", "Built", "Implemented", "Established", "Created", "Constructed", "Formulated"],
+        "analysis": ["Analyzed", "Evaluated", "Investigated", "Diagnosed", "Assessed", "Researched", "Examined", "Audited"],
+        "scale": ["Scaled", "Expanded", "Grew", "Increased", "Multiplied", "Amplified", "Extended", "Broadened"],
+        "technical": ["Deployed", "Automated", "Integrated", "Migrated", "Configured", "Refactored", "Executed", "Modernized"]
     }
+    
+    # MANDATORY verbs that MUST appear in every resume
+    MANDATORY_VERBS = ["Engineered", "Architected"]
     
     # Weak verbs to avoid
     WEAK_VERBS = [
@@ -59,6 +62,8 @@ Generate JD-anchored professional summary and bullets that reflect the user's re
 6. PROJECT COVERAGE: For EACH project listed, produce exactly 3 distinct bullets (XYZ/STAR) using that project's name/tech stack.
 7. CERT DESCRIPTIONS: For EACH certification listed, produce 1 concise line describing verified skills/knowledge and relevance to the JD.
 8. MANDATORY GENERATION: You MUST generate professional summary, 4 experience bullets, 3 bullets per project, and 1 description per certification. Empty output is NOT acceptable.
+9. **MANDATORY VERBS**: You MUST use "Engineered" and "Architected" at least once each across all bullets. These are REQUIRED.
+10. **NO DUPLICATE VERBS**: NEVER use the same strong action verb twice in the entire resume. Each bullet must start with a UNIQUE verb. Track all verbs used and ensure zero duplication.
 
 ### INPUT
 User Personal Info (name, years of experience, education):
@@ -696,12 +701,138 @@ Return ONLY the improved JSON structure.
 
         return fallback_experience
 
+    def _deduplicate_strong_verbs(self, content: Dict[str, Any], job_context: Dict[str, Any]) -> None:
+        """Ensure no duplicate action verbs across all bullets and mandatory verbs are present."""
+        # Collect all bullets from all sections
+        all_bullets = []
+        bullet_locations = []  # Track where each bullet is (for replacement)
+        
+        # Collect experience bullets
+        for exp_idx, exp in enumerate(content.get("experience", [])):
+            if isinstance(exp, dict) and isinstance(exp.get("bullets"), list):
+                for bullet_idx, bullet in enumerate(exp["bullets"]):
+                    all_bullets.append(bullet)
+                    bullet_locations.append(("experience", exp_idx, bullet_idx))
+        
+        # Collect project bullets
+        for proj_idx, proj in enumerate(content.get("projects", [])):
+            if isinstance(proj, dict) and isinstance(proj.get("bullets"), list):
+                for bullet_idx, bullet in enumerate(proj["bullets"]):
+                    all_bullets.append(bullet)
+                    bullet_locations.append(("project", proj_idx, bullet_idx))
+        
+        # Collect certification bullets if they exist
+        for cert_idx, cert in enumerate(content.get("certifications_with_descriptions", [])):
+            if isinstance(cert, dict) and isinstance(cert.get("description"), str):
+                # Treat description as a single bullet
+                all_bullets.append(cert["description"])
+                bullet_locations.append(("certification", cert_idx, 0))
+        
+        if not all_bullets:
+            logger.warning("No bullets found for verb deduplication")
+            return
+        
+        # Extract first word (verb) from each bullet
+        used_verbs = set()
+        verb_to_bullets = {}  # Map verb -> list of indices
+        
+        for idx, bullet in enumerate(all_bullets):
+            if not bullet or not bullet.strip():
+                continue
+            first_word = bullet.split()[0].rstrip('.,;:!?') if bullet.split() else ""
+            if first_word:
+                used_verbs.add(first_word)
+                if first_word not in verb_to_bullets:
+                    verb_to_bullets[first_word] = []
+                verb_to_bullets[first_word].append(idx)
+        
+        logger.info(f"Found {len(used_verbs)} unique verbs across {len(all_bullets)} bullets")
+        
+        # Check for mandatory verbs
+        mandatory_missing = [v for v in self.MANDATORY_VERBS if v not in used_verbs]
+        
+        # Replace duplicate verbs
+        for verb, indices in verb_to_bullets.items():
+            if len(indices) > 1:  # Duplicate found
+                logger.warning(f"Duplicate verb '{verb}' found in {len(indices)} bullets - replacing")
+                # Keep first occurrence, replace others
+                for idx in indices[1:]:
+                    original_bullet = all_bullets[idx]
+                    replacement_verb = self._find_replacement_verb(used_verbs, verb, original_bullet)
+                    if replacement_verb:
+                        new_bullet = replacement_verb + original_bullet[len(verb):]
+                        all_bullets[idx] = new_bullet
+                        used_verbs.add(replacement_verb)
+                        logger.info(f"Replaced '{verb}' with '{replacement_verb}' in bullet {idx}")
+        
+        # Ensure mandatory verbs are present
+        if mandatory_missing:
+            logger.warning(f"Mandatory verbs missing: {mandatory_missing} - injecting them")
+            # Replace some generic verbs with mandatory ones
+            for mandatory_verb in mandatory_missing:
+                # Find a bullet with a replaceable verb
+                replaced = False
+                for idx, bullet in enumerate(all_bullets):
+                    if not bullet or not bullet.strip():
+                        continue
+                    first_word = bullet.split()[0].rstrip('.,;:!?') if bullet.split() else ""
+                    # Replace generic verbs like "Developed", "Built", "Created" with mandatory verbs
+                    if first_word in ["Developed", "Built", "Created", "Implemented", "Designed"]:
+                        new_bullet = mandatory_verb + bullet[len(first_word):]
+                        all_bullets[idx] = new_bullet
+                        used_verbs.add(mandatory_verb)
+                        logger.info(f"Injected mandatory verb '{mandatory_verb}' by replacing '{first_word}'")
+                        replaced = True
+                        break
+                
+                if not replaced:
+                    logger.warning(f"Could not inject mandatory verb '{mandatory_verb}' - no suitable replacement found")
+        
+        # Write back the modified bullets to content
+        for idx, (section, section_idx, bullet_idx) in enumerate(bullet_locations):
+            if section == "experience":
+                content["experience"][section_idx]["bullets"][bullet_idx] = all_bullets[idx]
+            elif section == "project":
+                content["projects"][section_idx]["bullets"][bullet_idx] = all_bullets[idx]
+            elif section == "certification":
+                content["certifications_with_descriptions"][section_idx]["description"] = all_bullets[idx]
+        
+        logger.info(f"Verb deduplication complete - {len(used_verbs)} unique verbs in final output")
+    
+    def _find_replacement_verb(self, used_verbs: set, original_verb: str, bullet_text: str) -> str:
+        """Find a suitable replacement verb that hasn't been used yet."""
+        # Determine category of original verb
+        verb_category = None
+        for category, verbs in self.STRONG_VERBS.items():
+            if original_verb in verbs:
+                verb_category = category
+                break
+        
+        # Try to find unused verb from same category
+        if verb_category:
+            for verb in self.STRONG_VERBS[verb_category]:
+                if verb not in used_verbs:
+                    return verb
+        
+        # If no verb from same category, try all categories
+        for category_verbs in self.STRONG_VERBS.values():
+            for verb in category_verbs:
+                if verb not in used_verbs:
+                    return verb
+        
+        # Last resort: use a generic strong verb with a suffix
+        logger.warning(f"Could not find unused replacement for '{original_verb}' - using fallback")
+        return original_verb  # Keep original if no alternative found
+    
     def _apply_uniqueness_guards(
         self,
         content: Dict[str, Any],
         job_context: Dict[str, Any]
     ) -> None:
         """Enforce unique verb+object+metric and 4-gram separation across bullets."""
+        # First, deduplicate strong verbs (most critical)
+        self._deduplicate_strong_verbs(content, job_context)
+        
         bullet_lists: List[List[str]] = []
 
         # Collect experience bullets
@@ -933,10 +1064,41 @@ Return ONLY the improved JSON structure.
         if weak_phrases:
             warnings.append(f"Weak phrases found: {', '.join(weak_phrases)}")
         
+        # NEW: Check for duplicate verbs
+        all_bullets = []
+        for exp in content.get("experience", []):
+            if isinstance(exp, dict) and isinstance(exp.get("bullets"), list):
+                all_bullets.extend(exp["bullets"])
+        for proj in content.get("projects", []):
+            if isinstance(proj, dict) and isinstance(proj.get("bullets"), list):
+                all_bullets.extend(proj["bullets"])
+        
+        used_verbs = []
+        for bullet in all_bullets:
+            if bullet and bullet.strip():
+                first_word = bullet.split()[0].rstrip('.,;:!?') if bullet.split() else ""
+                if first_word:
+                    used_verbs.append(first_word)
+        
+        # Check for duplicates
+        unique_verbs = set(used_verbs)
+        duplicate_count = len(used_verbs) - len(unique_verbs)
+        if duplicate_count > 0:
+            warnings.append(f"Found {duplicate_count} duplicate action verbs - should be 100% unique")
+            recommendations.append("Replace duplicate verbs with unique alternatives")
+        
+        # Check for mandatory verbs
+        missing_mandatory = [v for v in self.MANDATORY_VERBS if v not in unique_verbs]
+        if missing_mandatory:
+            warnings.append(f"Missing mandatory verbs: {', '.join(missing_mandatory)}")
+            recommendations.append(f"Ensure {', '.join(self.MANDATORY_VERBS)} appear in the resume")
+        
         return {
             "quantification_rate": quant_rate,
             "action_verb_compliance": verb_compliance,
             "keyword_coverage": keyword_coverage,
+            "verb_uniqueness": len(unique_verbs) / len(used_verbs) if used_verbs else 1.0,
+            "mandatory_verbs_present": len(missing_mandatory) == 0,
             "warnings": warnings,
             "recommendations": recommendations,
             "overall_quality": "excellent" if not warnings else "needs_improvement"
